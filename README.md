@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HotPot Factor
 
-## Getting Started
+Sistema D2C de créditos de comida preparada.
+El cliente compra un paquete, recibe créditos, asigna platillos a fechas y recibe comida en su puerta.
 
-First, run the development server:
+## Stack
+
+- Next.js 14 (App Router)
+- Supabase (Postgres + Auth + Storage)
+- Vercel
+- Stripe
+- Anthropic API (Sofía)
+- Resend
+- Tailwind CSS v3
+
+## Setup
 
 ```bash
+npm install
+cp .env.example .env.local
+npx supabase start
+npx supabase db reset
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Variables de entorno
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+STRIPE_SECRET_KEY=
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
+STRIPE_WEBHOOK_SECRET=
+ANTHROPIC_API_KEY=
+RESEND_API_KEY=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+CRON_SECRET=
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Entornos
 
-## Learn More
+| Entorno    | Branch     | Supabase          |
+|------------|------------|-------------------|
+| local      | cualquiera | CLI local         |
+| staging    | feature/*  | Proyecto gratuito |
+| producción | main       | Proyecto de pago  |
 
-To learn more about Next.js, take a look at the following resources:
+## Documentación
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- INVARIANTES.md — reglas que nunca se rompen en código
+- DECISIONES.md — decisiones de negocio y técnicas
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Plan de 6 semanas
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Semana 1: Repo, Supabase, schema, entornos
+- Semana 2: Sitio público, menú, paquetes
+- Semana 3: Auth, compra con Stripe, ledger de créditos
+- Semana 4: Calendario, corte de 48h, vista de cocina
+- Semana 5: Sofía, cupones, emails
+- Semana 6: QA, deploy, capacitación
