@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { Sofia } from '../components/Sofia'
 
 export default async function ClienteLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -26,7 +27,6 @@ export default async function ClienteLayout({ children }: { children: React.Reac
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--color-ink)' }}>
-      {/* Sidebar */}
       <aside style={{ width: 248, background: 'var(--color-surface)', borderRight: '1px solid var(--color-line)', padding: '24px 20px', display: 'flex', flexDirection: 'column' }}>
         <Link href="/" style={{ color: 'var(--color-gold)', fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 600, letterSpacing: '0.06em', marginBottom: 32, display: 'block' }}>
           HOTPOT FACTOR
@@ -48,11 +48,10 @@ export default async function ClienteLayout({ children }: { children: React.Reac
           </form>
         </div>
       </aside>
-
-      {/* Main */}
       <main className="flex-1 p-10">
         {children}
       </main>
+      <Sofia />
     </div>
   )
 }
