@@ -175,6 +175,9 @@ export default function LandingPage() {
           <div className="flex gap-6">
             <span style={{ color: 'var(--color-muted)', fontSize: 14 }}>Aviso de privacidad</span>
             <span style={{ color: 'var(--color-muted)', fontSize: 14 }}>Términos y condiciones</span>
+            <Link href="/admin-login" style={{ color: 'var(--color-disabled)', fontSize: 12 }}>
+  Administración
+</Link>
           </div>
         </div>
       </footer>
