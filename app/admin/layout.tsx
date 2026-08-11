@@ -5,7 +5,16 @@ import { redirect } from 'next/navigation'
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  if (!user) redirect('/admin-login')
+
+  const { data: staff } = await supabase
+    .from('staff')
+    .select('id, nombre, rol')
+    .eq('id', user.id)
+    .eq('activo', true)
+    .single()
+
+  if (!staff) redirect('/admin-login')
 
   const nav = [
     { href: '/admin', label: 'Panel' },
@@ -34,6 +43,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </Link>
           ))}
         </nav>
+        <div style={{ borderTop: '1px solid var(--color-line)', paddingTop: 20, paddingLeft: 12 }}>
+          <p style={{ color: 'var(--color-cream)', fontSize: 13, fontWeight: 500 }}>{staff.nombre}</p>
+          <p style={{ color: 'var(--color-muted)', fontSize: 11, marginTop: 2 }}>{staff.rol}</p>
+          <form action="/auth/signout" method="post" style={{ marginTop: 12 }}>
+            <button type="submit" style={{ color: 'var(--color-muted)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              Cerrar sesión
+            </button>
+          </form>
+        </div>
       </aside>
       <main className="flex-1">
         {children}
