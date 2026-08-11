@@ -44,4 +44,4 @@ export default async function CreditosPage() {
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)', borderRadius: 12, padding: '22px' }}>
         <p style={{ color: 'var(--color-gold)', fontSize: 10, fontWeight: 500, letterSpacing: '0.10em', marginBottom: 16 }}>MOVIMIENTOS</p>
         {movimientos && movimientos.length > 0
-ls src/app/cuenta/creditos/page.tsx
+
