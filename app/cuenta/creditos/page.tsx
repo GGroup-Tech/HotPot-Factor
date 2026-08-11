@@ -43,5 +43,46 @@ export default async function CreditosPage() {
 
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)', borderRadius: 12, padding: '22px' }}>
         <p style={{ color: 'var(--color-gold)', fontSize: 10, fontWeight: 500, letterSpacing: '0.10em', marginBottom: 16 }}>MOVIMIENTOS</p>
-        {movimientos && movimientos.length > 0
-
+       {movimientos && movimientos.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            {movimientos.map((mov: any) => (
+              <div
+                key={mov.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: '1px solid var(--color-line)',
+                  paddingBottom: 12,
+                }}
+              >
+                <div>
+                  <p style={{ color: 'var(--color-cream)', fontSize: 15 }}>
+                    {tipoLabel[mov.tipo] ?? mov.tipo}
+                  </p>
+                  <p style={{ color: 'var(--color-muted)', fontSize: 13 }}>
+                    {new Date(mov.creado_en).toLocaleDateString()}
+                  </p>
+                </div>
+                <p
+                  style={{
+                    color: mov.cantidad >= 0 ? 'var(--color-gold)' : 'var(--color-muted)',
+                    fontSize: 16,
+                    fontWeight: 600,
+                  }}
+                >
+                  {mov.cantidad >= 0 ? '+' : ''}
+                  {mov.cantidad}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: 'var(--color-muted)', fontSize: 14 }}>
+            No hay movimientos todavía.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
