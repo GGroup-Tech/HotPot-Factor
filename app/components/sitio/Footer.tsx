@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 /** Footer — Figma node 244:195. */
@@ -6,9 +7,13 @@ export function Footer() {
     <footer className="flex flex-col gap-14 px-[100px] pb-11 pt-20">
       <div className="flex flex-col items-start justify-between gap-12 md:flex-row">
         <div className="flex w-[320px] flex-col gap-4">
-          <p className="font-display text-[24px] font-semibold tracking-[1.44px] text-gold">
-            HotPot Factor
-          </p>
+          <Image
+            src="/logo/logo-cream.png"
+            alt="HotPot Factor"
+            width={327}
+            height={480}
+            className="h-[64px] w-auto"
+          />
           <p className="text-[15px] leading-[25px] text-muted">
             Comida real, preparada fresca cada semana y entregada en tu puerta.
           </p>
