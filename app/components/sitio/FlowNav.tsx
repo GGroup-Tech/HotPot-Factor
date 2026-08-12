@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
@@ -21,8 +22,14 @@ export async function FlowNav() {
   return (
     <>
       <div className="flex items-center justify-between px-[100px] py-6">
-        <Link href="/" className="font-display text-[24px] font-semibold tracking-[1.44px] text-gold">
-          HotPot Factor
+        <Link href="/" aria-label="HotPot Factor" className="flex items-center">
+          <Image
+            src="/logo/logo-cream.png"
+            alt="HotPot Factor"
+            width={327}
+            height={480}
+            className="h-[48px] w-auto"
+          />
         </Link>
         {nombre ? (
           <p className="text-[15px] text-muted">{nombre}</p>
