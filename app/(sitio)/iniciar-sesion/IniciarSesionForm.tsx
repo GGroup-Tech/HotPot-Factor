@@ -9,7 +9,7 @@ export function IniciarSesionForm({ next }: { next: string }) {
   const [state, formAction, pending] = useActionState<IniciarSesionState, FormData>(iniciarSesion, {});
 
   return (
-    <form action={formAction} className="flex w-[400px] flex-col items-start gap-5">
+    <form action={formAction} className="flex w-[480px] flex-col items-start gap-5">
       <input type="hidden" name="next" value={next} />
       <Field label="Correo electrónico" name="email" type="email" required />
       <Field label="Contraseña" name="password" type="password" required />
