@@ -1,6 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { LOGO_CREAM_SRC } from "@/lib/brand/logo";
 
 /** Nav — Figma node 244:3. Mismo header en Landing v2 y en 01-05. */
 export async function Nav() {
@@ -12,8 +12,14 @@ export async function Nav() {
   return (
     <header className="flex items-center justify-between px-[100px] py-[26px]">
       <Link href="/" aria-label="HotPot Factor" className="flex items-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={LOGO_CREAM_SRC} alt="HotPot Factor" className="h-[52px] w-auto" />
+        <Image
+          src="/logo-cream.png"
+          alt="HotPot Factor"
+          width={327}
+          height={480}
+          priority
+          className="h-[52px] w-auto"
+        />
       </Link>
       <nav className="hidden items-center gap-[34px] text-[16px] text-muted md:flex">
         <Link href="/#menu-semanal" className="hover:text-cream">
