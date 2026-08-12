@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { requireUsuario } from "@/lib/supabase/staff";
 import { createClient } from "@/lib/supabase/server";
@@ -38,8 +39,14 @@ export default async function ConfirmacionPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center justify-between px-[100px] py-6">
-        <Link href="/" className="font-display text-[24px] font-semibold tracking-[1.44px] text-gold">
-          HotPot Factor
+        <Link href="/" aria-label="HotPot Factor" className="flex items-center">
+          <Image
+            src="/logo/logo-cream.png"
+            alt="HotPot Factor"
+            width={327}
+            height={480}
+            className="h-[48px] w-auto"
+          />
         </Link>
         <div className="flex items-center gap-4">
           <div className="pill">
