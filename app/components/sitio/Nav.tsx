@@ -1,46 +1,61 @@
+import Image from "next/image";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
 
-/** Nav — Figma node 244:3. Mismo header en Landing v2 y en 01-05. */
-export async function Nav() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+/** Footer — Figma node 244:195. */
+export function Footer() {
   return (
-    <header className="flex items-center justify-between px-[100px] py-[26px]">
-      <Link
-        href="/"
-        className="font-display text-[26px] font-semibold tracking-[1.56px] text-gold"
-      >
-        HotPot Factor
-      </Link>
-      <nav className="hidden items-center gap-[34px] text-[16px] text-muted md:flex">
-        <Link href="/#menu-semanal" className="hover:text-cream">
-          Menú semanal
-        </Link>
-        <Link href="/#paquetes" className="hover:text-cream">
-          Planes
-        </Link>
-        <Link href="/#nosotros" className="hover:text-cream">
-          Nosotros
-        </Link>
-      </nav>
-      <div className="flex items-center gap-5">
-        {user ? (
-          <Link href="/cuenta" className="text-[16px] text-cream hover:text-gold">
-            Mi cuenta
+    <footer className="flex flex-col gap-14 px-[100px] pb-11 pt-20">
+      <div className="flex flex-col items-start justify-between gap-12 md:flex-row">
+        <div className="flex w-[320px] flex-col gap-4">
+          <Image
+            src="/logo/logo-cream.png"
+            alt="HotPot Factor"
+            width={327}
+            height={480}
+            className="h-[64px] w-auto"
+          />
+          <p className="text-[15px] leading-[25px] text-muted">
+            Comida real, preparada fresca cada semana y entregada en tu puerta.
+          </p>
+        </div>
+        <div className="flex flex-col gap-[14px]">
+          <p className="text-eyebrow text-gold">PRODUCTO</p>
+          <Link href="/#menu-semanal" className="text-[15px] text-muted hover:text-cream">
+            Menú semanal
           </Link>
-        ) : (
-          <Link href="/iniciar-sesion" className="text-[16px] text-cream hover:text-gold">
-            Iniciar sesión
+          <Link href="/#paquetes" className="text-[15px] text-muted hover:text-cream">
+            Paquetes
           </Link>
-        )}
-        <Link href="/paquetes" className="btn-primary rounded-control px-6 py-[13px] text-[16px]">
-          Comenzar
-        </Link>
+          <Link href="/#como-funciona" className="text-[15px] text-muted hover:text-cream">
+            Cómo funciona
+          </Link>
+        </div>
+        <div className="flex flex-col gap-[14px]">
+          <p className="text-eyebrow text-gold">EMPRESA</p>
+          <Link href="/#nosotros" className="text-[15px] text-muted hover:text-cream">
+            Nosotros
+          </Link>
+          <span className="text-[15px] text-muted">Blog</span>
+        </div>
+        <div className="flex flex-col gap-[14px]">
+          <p className="text-eyebrow text-gold">CONTACTO</p>
+          <a href="mailto:hola@hotpotfactor.mx" className="text-[15px] text-muted hover:text-cream">
+            hola@hotpotfactor.mx
+          </a>
+          <span className="text-[15px] text-muted">+52 81 0000 0000</span>
+        </div>
       </div>
-    </header>
+      <div className="flex w-full items-center justify-between border-t border-line pt-7 text-[14px] text-muted">
+        <p>© 2026 HotPot Factor. Todos los derechos reservados.</p>
+        <div className="flex gap-6">
+          <Link href="/privacidad" className="hover:text-cream">
+            Aviso de privacidad
+          </Link>
+          <Link href="/terminos" className="hover:text-cream">
+            Términos y condiciones
+          </Link>
+        </div>
+      </div>
+    </footer>
   );
 }
