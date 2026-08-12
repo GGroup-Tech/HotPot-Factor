@@ -29,7 +29,7 @@ export function Hero() {
 
   return (
     <section className="flex items-center gap-16 px-[100px] pb-[104px] pt-24">
-      <div className="flex w-[556px] flex-col items-start gap-7">
+      <div className="flex w-[556px] shrink-0 flex-col items-start gap-7">
         <div className="rounded-pill border border-line px-4 py-[9px]">
           <p className="text-[12px] font-medium tracking-[1.2px] text-gold">
             COMIDA REAL, LISTA PARA TU SEMANA
@@ -64,14 +64,14 @@ export function Hero() {
           ))}
         </div>
       </div>
-      <div className="relative h-[500px] w-[560px] overflow-hidden rounded-card-lg bg-raised">
+      <div className="relative aspect-[560/500] w-full max-w-[720px] flex-1 overflow-hidden rounded-card-lg bg-raised">
         {HERO_IMAGES.map((src, i) => (
           <Image
             key={src}
             src={src}
             alt="Platillos HotPot Factor"
             fill
-            sizes="560px"
+            sizes="(max-width: 1024px) 100vw, 720px"
             priority={i === 0}
             className="object-cover transition-opacity duration-700"
             style={{ opacity: i === index ? 1 : 0 }}
