@@ -1,7 +1,7 @@
+import Image from "next/image";
 import Link from "next/link";
 import { requireUsuario } from "@/lib/supabase/staff";
 import { createClient } from "@/lib/supabase/server";
-import { LOGO_CREAM_SRC } from "@/lib/brand/logo";
 
 const currency = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 });
 const fechaLarga = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" });
@@ -40,8 +40,13 @@ export default async function ConfirmacionPage() {
     <div className="flex min-h-screen flex-col">
       <div className="flex items-center justify-between px-[100px] py-6">
         <Link href="/" aria-label="HotPot Factor" className="flex items-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={LOGO_CREAM_SRC} alt="HotPot Factor" className="h-[48px] w-auto" />
+          <Image
+            src="/logo-cream.png"
+            alt="HotPot Factor"
+            width={327}
+            height={480}
+            className="h-[48px] w-auto"
+          />
         </Link>
         <div className="flex items-center gap-4">
           <div className="pill">
