@@ -12,17 +12,6 @@ function normalizar(texto: string): string {
     .trim();
 }
 
-/**
- * Valida cobertura por colonia contra `zonas_cobertura`. Antes usaba
- * `.ilike()` en la base de datos, que en Postgres es case-insensitive
- * pero SÍ distingue acentos — "Lopez Mateos" (sin acento, como suele
- * escribir la gente) no hacía match con "López Mateos" en la tabla, y
- * el banner mostraba "fuera de cobertura" aunque la colonia sí
- * estuviera dada de alta. Por eso ahora se trae la tabla completa
- * (activa = true, es chica) y se compara normalizando acentos/mayúsculas
- * en JS, en ambas direcciones (substring de un lado o del otro), para
- * tolerar variaciones como "Del Valle" vs "Colonia del Valle".
- */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const colonia = searchParams.get("colonia")?.trim();
@@ -32,7 +21,7 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createClient();
-  const { data: zonas } = await supabase
+  const { data: zonas, error } = await supabase
     .from("zonas_cobertura")
     .select("colonia")
     .eq("activa", true);
@@ -43,5 +32,17 @@ export async function GET(request: Request) {
     return zona.length > 0 && (entrada.includes(zona) || zona.includes(entrada));
   });
 
-  return NextResponse.json({ cubierta, zonasConfiguradas: (zonas ?? []).length });
+  // DEBUG TEMPORAL — quitar `debug` de la respuesta una vez resuelto el
+  // problema de cobertura que no encontraba coincidencias en producción.
+  return NextResponse.json({
+    cubierta,
+    zonasConfiguradas: (zonas ?? []).length,
+    debug: {
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? null,
+      anonKeyTail: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.slice(-8)
+        : null,
+      error: error ? { message: error.message, code: error.code, details: error.details, hint: error.hint } : null,
+    },
+  });
 }
