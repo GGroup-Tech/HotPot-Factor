@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { hayCobertura } from "@/lib/cobertura";
 
 export const runtime = "nodejs";
-
-/** minúsculas + sin acentos, para comparar "López Mateos" con "lopez mateos". */
-function normalizar(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -21,28 +13,12 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createClient();
-  const { data: zonas, error } = await supabase
+  const { data: zonas } = await supabase
     .from("zonas_cobertura")
     .select("colonia")
     .eq("activa", true);
 
-  const entrada = normalizar(colonia);
-  const cubierta = (zonas ?? []).some(({ colonia: zonaColonia }) => {
-    const zona = normalizar(zonaColonia);
-    return zona.length > 0 && (entrada.includes(zona) || zona.includes(entrada));
-  });
+  const cubierta = hayCobertura(colonia, (zonas ?? []).map((z) => z.colonia));
 
-  // DEBUG TEMPORAL — quitar `debug` de la respuesta una vez resuelto el
-  // problema de cobertura que no encontraba coincidencias en producción.
-  return NextResponse.json({
-    cubierta,
-    zonasConfiguradas: (zonas ?? []).length,
-    debug: {
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? null,
-      anonKeyTail: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.slice(-8)
-        : null,
-      error: error ? { message: error.message, code: error.code, details: error.details, hint: error.hint } : null,
-    },
-  });
+  return NextResponse.json({ cubierta });
 }
