@@ -28,7 +28,9 @@ export default async function AdminMenuPage({
   const [{ data: menuRaw }, { data: comodinesRaw }, { data: platillos }] = await Promise.all([
     admin
       .from("menu_mes")
-      .select("dia_semana, publicado, publicado_en, platillo_id, platillos(id, nombre, descripcion, calorias, proteina_g, carbs_g, grasa_g)")
+      .select(
+        "dia_semana, publicado, publicado_en, platillo_id, platillos(id, nombre, descripcion, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos)",
+      )
       .eq("anio", anio)
       .eq("mes", mesNum),
     admin
@@ -39,7 +41,24 @@ export default async function AdminMenuPage({
     admin.from("platillos").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
-  const menuPorDia = new Map<number, { platilloId: string; platillo: { nombre: string; descripcion: string | null; calorias: number | null; proteina_g: number | null; carbs_g: number | null; grasa_g: number | null } | null }>();
+  const menuPorDia = new Map
+    number,
+    {
+      platilloId: string;
+      platillo: {
+        nombre: string;
+        descripcion: string | null;
+        calorias: number | null;
+        proteina_g: number | null;
+        carbs_g: number | null;
+        grasa_g: number | null;
+        grasa_saturada_g: number | null;
+        fibra_g: number | null;
+        sodio_mg: number | null;
+        alergenos: string | null;
+      } | null;
+    }
+  >();
   let publicado = false;
   let publicadoEn: string | null = null;
   for (const f of menuRaw ?? []) {
@@ -120,12 +139,26 @@ export default async function AdminMenuPage({
                     <p className="text-[12px] leading-[18px] text-muted">{actual.platillo.descripcion}</p>
                   )}
                   {actual.platillo.calorias != null && (
-                    <div className="flex justify-between border-t border-line pt-2 text-center text-[11px] text-cream">
-                      <span>{actual.platillo.calorias}kcal</span>
-                      <span>{actual.platillo.proteina_g}g prot</span>
-                      <span>{actual.platillo.carbs_g}g carb</span>
-                      <span>{actual.platillo.grasa_g}g grasa</span>
+                    <div className="flex flex-col gap-1 border-t border-line pt-2 text-center text-[11px] text-cream">
+                      <div className="flex justify-between">
+                        <span>{actual.platillo.calorias}kcal</span>
+                        <span>{actual.platillo.proteina_g}g prot</span>
+                        <span>{actual.platillo.carbs_g}g carb</span>
+                        <span>{actual.platillo.grasa_g}g grasa</span>
+                      </div>
+                      {(actual.platillo.grasa_saturada_g != null ||
+                        actual.platillo.fibra_g != null ||
+                        actual.platillo.sodio_mg != null) && (
+                        <div className="flex justify-between text-muted">
+                          <span>{actual.platillo.grasa_saturada_g ?? 0}g sat</span>
+                          <span>{actual.platillo.fibra_g ?? 0}g fibra</span>
+                          <span>{actual.platillo.sodio_mg ?? 0}mg sodio</span>
+                        </div>
+                      )}
                     </div>
+                  )}
+                  {actual.platillo.alergenos && (
+                    <p className="text-[10px] text-muted">Alérgenos: {actual.platillo.alergenos}</p>
                   )}
                 </>
               ) : (
