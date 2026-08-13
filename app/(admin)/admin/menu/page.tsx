@@ -1,21 +1,10 @@
 import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DIAS_SEMANA_LARGO, MESES } from "@/lib/calendario";
-import { DiaMenuForm, ComodinAgregarForm, ComodinQuitarBoton, AccionMenuBoton } from "./MenuClientForms";
+import { DiaMenuForm, ComodinAgregarForm, ComodinQuitarBoton, AccionMenuBoton, NuevoPlatilloInline } from "./MenuClientForms";
 
 const fechaLarga = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long" });
 
-/**
- * A3 — Admin · Menú del mes. Figma node 250:2. Edición real del menú
- * fijo por día de la semana y los comodines del mes — no un mockup:
- * cada cambio escribe directo a `menu_mes`/`comodines_mes`.
- *
- * Los controles (Guardar/Agregar/Quitar/Copiar/Publicar) viven en
- * `MenuClientForms.tsx` como componentes cliente con `useTransition` —
- * antes eran `<form action={...}>` de servidor inline, que el usuario
- * reportó como "no hacen nada" al hacer click (2026-08-13): sin manejo
- * de error del lado del cliente, cualquier falla quedaba invisible.
- */
 export default async function AdminMenuPage({
   searchParams,
 }: {
@@ -113,6 +102,8 @@ export default async function AdminMenuPage({
             : `Menú sin publicar todavía. Los clientes no ven este menú hasta que lo publiques.`}
         </p>
       </div>
+
+      <NuevoPlatilloInline />
 
       <p className="text-[18px] font-medium text-cream">Platillo fijo por día</p>
       <div className="grid w-full grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
