@@ -5,6 +5,21 @@ import { DiaMenuForm, ComodinAgregarForm, ComodinQuitarBoton, AccionMenuBoton, N
 
 const fechaLarga = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long" });
 
+type PlatilloMenuInfo = {
+  nombre: string;
+  descripcion: string | null;
+  calorias: number | null;
+  proteina_g: number | null;
+  carbs_g: number | null;
+  grasa_g: number | null;
+  grasa_saturada_g: number | null;
+  fibra_g: number | null;
+  sodio_mg: number | null;
+  alergenos: string | null;
+};
+
+type MenuDiaInfo = { platilloId: string; platillo: PlatilloMenuInfo | null };
+
 export default async function AdminMenuPage({
   searchParams,
 }: {
@@ -41,24 +56,7 @@ export default async function AdminMenuPage({
     admin.from("platillos").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
-  const menuPorDia = new Map
-    number,
-    {
-      platilloId: string;
-      platillo: {
-        nombre: string;
-        descripcion: string | null;
-        calorias: number | null;
-        proteina_g: number | null;
-        carbs_g: number | null;
-        grasa_g: number | null;
-        grasa_saturada_g: number | null;
-        fibra_g: number | null;
-        sodio_mg: number | null;
-        alergenos: string | null;
-      } | null;
-    }
-  >();
+  const menuPorDia = new Map<number, MenuDiaInfo>();
   let publicado = false;
   let publicadoEn: string | null = null;
   for (const f of menuRaw ?? []) {
