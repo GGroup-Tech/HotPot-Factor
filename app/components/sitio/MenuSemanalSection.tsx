@@ -15,7 +15,7 @@ export async function MenuSemanalSection() {
 
   const { data: filas } = await supabase
     .from("menu_mes")
-    .select("publicado, platillo_id, platillos(id, nombre, descripcion, imagen_url, etiqueta, kcal, proteina_g, carbohidratos_g, grasa_g)")
+    .select("publicado, platillo_id, platillos(id, nombre, descripcion, foto_url, calorias, proteina_g, carbs_g, grasa_g)")
     .eq("anio", hoy.getFullYear())
     .eq("mes", hoy.getMonth() + 1);
 
