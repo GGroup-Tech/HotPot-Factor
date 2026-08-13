@@ -29,7 +29,7 @@ export function Hero() {
 
   return (
     <section className="flex flex-col items-center gap-10 px-6 pb-16 pt-14 md:px-10 md:pt-20 lg:flex-row lg:items-center lg:gap-16 lg:px-[100px] lg:pb-[104px] lg:pt-24">
-      <div className="flex w-full flex-col items-start gap-7 lg:w-[556px] lg:shrink-0">
+      <div className="flex w-full flex-col items-start gap-7 lg:w-[38%] lg:min-w-[420px] lg:shrink-0">
         <div className="rounded-pill border border-line px-4 py-[9px]">
           <p className="text-[12px] font-medium tracking-[1.2px] text-gold">
             COMIDA REAL, LISTA PARA TU SEMANA
@@ -64,7 +64,7 @@ export function Hero() {
           ))}
         </div>
       </div>
-      <div className="relative aspect-[560/500] w-full max-w-[720px] flex-1 overflow-hidden rounded-card-lg bg-raised">
+      <div className="relative aspect-[560/500] w-full flex-1 overflow-hidden rounded-card-lg bg-raised">
         {HERO_IMAGES.map((src, i) => (
           <Image
             key={src}
