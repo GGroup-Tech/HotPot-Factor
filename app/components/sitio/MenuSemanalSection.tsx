@@ -1,21 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { PlatilloCard, type PlatilloCardData } from "./PlatilloCard";
 
-/**
- * Menú semanal — Figma node 244:122. Solo se muestra si `menu_mes` para
- * el mes actual tiene `publicado = true` (el menú se publica el día 20
- * del mes anterior). Mientras no esté publicado se muestra un estado
- * de espera en vez del grid. `menu_mes` usa `anio` + `mes` como
- * columnas INTEGER separadas, no un solo campo de fecha/texto — ver
- * nota de esquema en types/database.ts.
- */
 export async function MenuSemanalSection() {
   const supabase = await createClient();
   const hoy = new Date();
 
   const { data: filas } = await supabase
     .from("menu_mes")
-    .select("publicado, platillo_id, platillos(id, nombre, descripcion, foto_url, calorias, proteina_g, carbs_g, grasa_g)")
+    .select(
+      "publicado, platillo_id, platillos(id, nombre, descripcion, foto_url, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos)",
+    )
     .eq("anio", hoy.getFullYear())
     .eq("mes", hoy.getMonth() + 1);
 
