@@ -277,6 +277,60 @@ export async function alternarCupon(cuponId: string, activo: boolean): Promise<A
 }
 
 /**
+ * Crea un platillo nuevo en el catálogo. Esquema real de `platillos`
+ * confirmado 2026-08-13 vía information_schema: `foto_url` (no
+ * `imagen_url`), `calorias` (no `kcal`), `carbs_g` (no
+ * `carbohidratos_g`) — no existen columnas `categoria`, `etiqueta` ni
+ * `disponible_comodin` (se habían asumido sin verificar y nunca
+ * existieron, lo que rompía por completo cualquier `.select()` anidado
+ * que las pidiera).
+ */
+export async function crearPlatillo(formData: FormData): Promise<AccionAdminResult> {
+  await requireStaff();
+  const admin = createAdminClient();
+
+  const nombre = String(formData.get("nombre") ?? "").trim();
+  const descripcion = String(formData.get("descripcion") ?? "").trim() || null;
+  const fotoUrl = String(formData.get("foto_url") ?? "").trim() || null;
+  const caloriasStr = String(formData.get("calorias") ?? "");
+  const proteinaStr = String(formData.get("proteina_g") ?? "");
+  const carbsStr = String(formData.get("carbs_g") ?? "");
+  const grasaStr = String(formData.get("grasa_g") ?? "");
+
+  if (!nombre) return { ok: false, error: "El nombre es obligatorio." };
+
+  const aEntero = (s: string) => (s.trim() === "" ? null : Number.isFinite(Number(s)) ? Math.round(Number(s)) : null);
+
+  const { error } = await admin.from("platillos").insert({
+    nombre,
+    descripcion,
+    foto_url: fotoUrl,
+    calorias: aEntero(caloriasStr),
+    proteina_g: aEntero(proteinaStr),
+    carbs_g: aEntero(carbsStr),
+    grasa_g: aEntero(grasaStr),
+    activo: true,
+  });
+
+  if (error) return { ok: false, error: "No se pudo crear el platillo." };
+
+  revalidatePath("/admin/platillos");
+  revalidatePath("/admin/menu");
+  return { ok: true };
+}
+
+/** Activa/desactiva un platillo (no lo borra — puede estar referenciado en pedidos pasados). */
+export async function alternarPlatilloActivo(platilloId: string, activo: boolean): Promise<AccionAdminResult> {
+  await requireStaff();
+  const admin = createAdminClient();
+  const { error } = await admin.from("platillos").update({ activo }).eq("id", platilloId);
+  if (error) return { ok: false, error: "No se pudo actualizar el platillo." };
+  revalidatePath("/admin/platillos");
+  revalidatePath("/admin/menu");
+  return { ok: true };
+}
+
+/**
  * Copia el menú fijo y los comodines del mes anterior al mes actual
  * (atajo "Copiar del mes pasado" en el Figma). No copia `publicado`
  * — el mes copiado siempre empieza sin publicar, aunque el mes de
