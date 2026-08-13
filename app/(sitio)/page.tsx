@@ -13,7 +13,6 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <Nav />
-      <div className="h-px w-full bg-line" />
       <main className="flex-1">
         <Hero />
         <ComoFunciona />
