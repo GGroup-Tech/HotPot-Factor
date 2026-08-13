@@ -11,7 +11,9 @@ export default async function EditarPlatilloPage({ params }: { params: Promise<{
 
   const { data: platillo } = await admin
     .from("platillos")
-    .select("id, nombre, descripcion, foto_url, calorias, proteina_g, carbs_g, grasa_g, activo")
+    .select(
+      "id, nombre, descripcion, foto_url, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, activo",
+    )
     .eq("id", id)
     .maybeSingle();
 
