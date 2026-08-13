@@ -8,21 +8,20 @@ import { AdminChrome } from "@/app/components/admin/AdminChrome";
  * fila en `staff` antes de pintar cualquier dato y le da a `AdminChrome`
  * el nombre a mostrar sin que cada página repita la query.
  *
- * Mismo límite de ancho (1440px, el frame de Figma) que `(cliente)` y
- * `(sitio)` — a esto le faltaba el `mx-auto max-w-[1440px]` que las
- * otras dos áreas ya tienen, así que en monitores grandes el shell de
- * admin se estiraba a todo el ancho de la pantalla en vez de quedarse
- * fijo al tamaño del diseño, y todo se veía "descuadrado" comparado
- * con una laptop. Con el cap, el layout es idéntico sin importar el
- * tamaño de pantalla — de más ancho solo sobra fondo a los lados, no
- * contenido estirado.
+ * A diferencia de `(sitio)` y `(cliente)` — que sí se capan a 1440px
+ * porque son pantallas de marca/consumo diseñadas pixel a pixel en
+ * Figma — el panel admin es una herramienta de trabajo (como Notion o
+ * Linear), así que aquí NO se pone un ancho máximo fijo: el sidebar
+ * (238px) queda fijo y el contenido (`flex-1` dentro de AdminChrome)
+ * llena el 100% del ancho disponible en cualquier monitor. Las grillas
+ * de tarjetas/tablas de cada página ya usan `w-full` + `grid-cols`
+ * responsivos, así que se reparten solas sin dejar franjas vacías.
+ * (Antes había un `mx-auto max-w-[1440px]` aquí — eso causaba
+ * exactamente el problema reportado: en monitores anchos el contenido
+ * se quedaba topado a 1440px con espacio muerto sobrante a un lado.)
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { staff } = await requireStaff();
 
-  return (
-    <div className="mx-auto max-w-[1440px]">
-      <AdminChrome nombreStaff={staff.nombre}>{children}</AdminChrome>
-    </div>
-  );
+  return <AdminChrome nombreStaff={staff.nombre}>{children}</AdminChrome>;
 }
