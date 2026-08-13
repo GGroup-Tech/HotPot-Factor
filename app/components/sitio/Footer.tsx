@@ -12,7 +12,7 @@ export function Footer() {
     <footer className="px-6 pb-11 pt-16 md:px-10 lg:px-[100px] lg:pt-20">
     <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-14">
       <div className="flex flex-col flex-wrap items-start justify-between gap-10 md:flex-row md:gap-12">
-        <div className="flex w-full max-w-[320px] md:w-[320px] flex-col gap-4">
+        <div className="flex w-full max-w-[320px] md:w-[320px] flex-col items-start gap-4">
           <Image
             src="/logo-cream.png"
             alt="HotPot Factor"
@@ -41,7 +41,7 @@ export function Footer() {
           <Link href="/#nosotros" className="text-[15px] text-muted hover:text-cream">
             Nosotros
           </Link>
-          <span className="text-[15px] text-muted">Blog</span>
+          <span className="text-[15px] text-muted">Zona de cobertura</span>
         </div>
         <div className="flex flex-col gap-[14px]">
           <p className="text-eyebrow text-gold">CONTACTO</p>
