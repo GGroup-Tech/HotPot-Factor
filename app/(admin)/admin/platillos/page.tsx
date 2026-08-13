@@ -3,22 +3,6 @@ import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PlatilloActivoBoton } from "./PlatilloForms";
 
-/**
- * Platillos — catálogo maestro de platos. No estaba en el Figma
- * original ni en las 8 secciones pedidas explícitamente, pero sin
- * esta pantalla no hay ninguna forma de dar de alta un platillo nuevo
- * en todo el panel (Menú del mes y Cupones solo pueden ASIGNAR
- * platillos que ya existen) — hueco reportado por el usuario
- * 2026-08-13 ("no me deja añadir platillos").
- *
- * "Agregar platillo" y "Editar" llevan a pantallas dedicadas
- * (`/nuevo` y `/[id]/editar`) en vez de un formulario metido al fondo
- * de esta lista — pedido explícito del usuario tras la primera versión.
- *
- * Esquema real de `platillos` confirmado 2026-08-13 vía
- * information_schema: id, nombre, descripcion, foto_url, calorias,
- * proteina_g, carbs_g, grasa_g, activo, creado_en.
- */
 export default async function AdminPlatillosPage() {
   await requireStaff();
   const admin = createAdminClient();
