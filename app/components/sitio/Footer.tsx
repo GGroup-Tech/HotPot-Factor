@@ -35,7 +35,7 @@ export function Footer() {
           <Link href="/#nosotros" className="text-[15px] text-muted hover:text-cream">
             Nosotros
           </Link>
-          <span className="text-[15px] text-muted">Blog</span>
+          <span className="text-[15px] text-muted">Zonas de cobertura</span>
         </div>
         <div className="flex flex-col gap-[14px]">
           <p className="text-eyebrow text-gold">CONTACTO</p>
