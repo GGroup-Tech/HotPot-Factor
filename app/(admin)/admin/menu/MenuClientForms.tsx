@@ -11,6 +11,23 @@ import {
   crearPlatillo,
 } from "../../actions";
 
+/**
+ * Versión cliente de los controles de Menú del mes. Antes estos eran
+ * `<form action={async () => { "use server"; ... }}>` inline dentro de
+ * la página (Server Component) — el usuario reportó 2026-08-13 que
+ * clickear Guardar/Agregar "no hacía nada en absoluto": ni carga, ni
+ * cambio, ni error. Con ese patrón, cualquier falla (de auth, de red,
+ * de origen/CSRF de Server Actions detrás de un dominio de Vercel, lo
+ * que sea) es invisible — no había ningún manejo de error del lado
+ * del cliente.
+ *
+ * Este archivo mueve la interacción a componentes cliente con
+ * `useTransition`, el mismo patrón ya probado y funcionando en
+ * `app/components/calendario/DiaCelda.tsx`: ahora cualquier error se
+ * muestra en pantalla en vez de fallar en silencio, y hay un estado
+ * de "Guardando…" visible mientras se procesa.
+ */
+
 type Platillo = { id: string; nombre: string };
 
 export function DiaMenuForm({
@@ -164,6 +181,14 @@ export function ComodinQuitarBoton({
   );
 }
 
+/**
+ * Atajo "+ Nuevo platillo" dentro de Menú del mes — el usuario pidió
+ * poder dar de alta un platillo sin salir de esta pantalla en vez de
+ * navegar a /admin/platillos/nuevo. Al crear con éxito hace
+ * `router.refresh()` para que el nuevo platillo aparezca de inmediato
+ * en los selects de días y comodines (esos datos vienen del server
+ * component `page.tsx`, así que hay que refrescarlo).
+ */
 export function NuevoPlatilloInline() {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
@@ -253,6 +278,10 @@ export function NuevoPlatilloInline() {
         <span className="text-[12px] font-medium text-muted">Alérgenos (opcional)</span>
         <input name="alergenos" placeholder="Contiene: trigo (gluten), huevo" className="input" />
       </label>
+      <label className="flex flex-col gap-2">
+        <span className="text-[12px] font-medium text-muted">Costo de producción por porción (MXN, opcional)</span>
+        <input name="costo_mxn" type="number" min="0" step="0.01" placeholder="65.00" className="input" />
+      </label>
       <button type="submit" disabled={pending} className="btn-primary w-full rounded-control py-3 text-[14px] disabled:opacity-40">
         {pending ? "Creando…" : "Crear platillo"}
       </button>
@@ -261,6 +290,7 @@ export function NuevoPlatilloInline() {
   );
 }
 
+/** Botones de página completa: "Copiar del mes pasado" y "Publicar menú". */
 export function AccionMenuBoton({
   tipo,
   anio,
