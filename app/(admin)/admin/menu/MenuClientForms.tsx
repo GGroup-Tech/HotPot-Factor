@@ -235,6 +235,24 @@ export function NuevoPlatilloInline() {
           <input name="grasa_g" type="number" min="0" placeholder="12" className="input" />
         </label>
       </div>
+      <div className="grid grid-cols-3 gap-4">
+        <label className="flex flex-col gap-2">
+          <span className="text-[12px] font-medium text-muted">Grasa saturada (g)</span>
+          <input name="grasa_saturada_g" type="number" min="0" placeholder="4" className="input" />
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="text-[12px] font-medium text-muted">Fibra (g)</span>
+          <input name="fibra_g" type="number" min="0" placeholder="5" className="input" />
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="text-[12px] font-medium text-muted">Sodio (mg)</span>
+          <input name="sodio_mg" type="number" min="0" placeholder="800" className="input" />
+        </label>
+      </div>
+      <label className="flex flex-col gap-2">
+        <span className="text-[12px] font-medium text-muted">Alérgenos (opcional)</span>
+        <input name="alergenos" placeholder="Contiene: trigo (gluten), huevo" className="input" />
+      </label>
       <button type="submit" disabled={pending} className="btn-primary w-full rounded-control py-3 text-[14px] disabled:opacity-40">
         {pending ? "Creando…" : "Crear platillo"}
       </button>
