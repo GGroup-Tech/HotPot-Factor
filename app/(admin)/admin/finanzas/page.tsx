@@ -1,6 +1,19 @@
 import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { registrarGasto, eliminarGasto, cerrarMesContable, reabrirMesContable } from "../../actions";
+import {
+  GastoForm,
+  GastoEliminarBoton,
+  GastoPagadoBoton,
+  CierreMesBoton,
+  ConfiguracionForm,
+  MetaMensualForm,
+  ActivoFijoForm,
+  ActivoFijoActivoBoton,
+  CuentaBancariaForm,
+  CuentaBancariaFila,
+  MovimientoCapitalForm,
+  MovimientoCapitalEliminarBoton,
+} from "./FinanzasClientForms";
 
 const currency = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 });
 const fechaCorta = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" });
@@ -10,6 +23,12 @@ function pad(n: number) {
 }
 function toISODate(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+/** Meses de un activo fijo ya depreciados hasta `hasta` (sin pasar de su vida útil). */
+function mesesTranscurridos(fechaCompra: Date, hasta: Date) {
+  let meses = (hasta.getFullYear() - fechaCompra.getFullYear()) * 12 + (hasta.getMonth() - fechaCompra.getMonth());
+  if (hasta.getDate() < fechaCompra.getDate()) meses -= 1;
+  return Math.max(0, meses);
 }
 
 const TABS = [
@@ -32,29 +51,25 @@ const PERIODOS = [
 
 /**
  * Finanzas — Figma nodes 206:2, 288:2, 225:2, 227:2, 227:270, 200:2,
- * 201:2, 202:2 (8 pestañas: Resumen/P&L/Flujo de caja/Indicadores/
- * Balance general/Cuentas por pagar/Gastos/Pasivo créditos) +
- * "Registrar gasto" (204:106).
+ * 201:2, 202:2 (8 pestañas). Ampliado 2026-08-13 a petición del
+ * usuario: se agregaron 5 tablas nuevas (metas_mensuales,
+ * activos_fijos, configuracion_financiera, cuentas_bancarias,
+ * capital_movimientos) + columnas (`platillos.costo_mxn`,
+ * `gastos.pagado`/`fecha_vencimiento`, `usuarios.desactivado_en`) para
+ * reemplazar los bloques "no disponible" por cálculos reales.
  *
- * El mock de 206:2 (129k caracteres, no cupo en una sola extracción
- * de Figma) es un estado de resultados completo con EBITDA,
- * depreciación, ISR, LTV/CAC/churn, balance general, cuentas por
- * pagar y ROI de marketing por canal — casi todo asume infraestructura
- * que este negocio no tiene: suscripciones recurrentes (HotPot Factor
- * vende paquetes de una sola exhibición, no suscripciones), costo de
- * producción por platillo (no existe columna de costo en `platillos`),
- * depreciación de activos, configuración de impuestos, atribución de
- * marketing por canal, y cuentas por cobrar/pagar.
+ * Sigue vigente la regla de esta página: ningún número inventado. Lo
+ * que todavía no tiene dato de respaldo real (p.ej. ISR sin
+ * configurar) se marca explícitamente en vez de mostrar un placeholder
+ * silencioso.
  *
- * Por decisión explícita del usuario: se reproduce la estructura
- * exacta de las 8 pestañas del Figma, pero cada renglón sin dato real
- * detrás muestra "No disponible" en vez de un número inventado — no
- * hay una sola cifra fabricada en esta página. Lo que SÍ es real y
- * se calcula en vivo: ingresos (compras), gastos (tabla `gastos`),
- * utilidad simple, flujo de caja (100% real porque el negocio cobra
- * al momento por Stripe — no hay diferencia entre devengado y
- * efectivo que modelar), ticket promedio, créditos vendidos vs.
- * consumidos (pasivo), e ingreso por porción entregada.
+ * Nota metodológica importante: "Ingresos" en todo el archivo sigue
+ * siendo caja cobrada (compras del período), no ingreso devengado por
+ * platillo entregado — así estaba antes y se mantiene por
+ * consistencia. El costo de producción, en cambio, sí se mide por
+ * platillos ENTREGADOS en el período (devengado). Es una mezcla
+ * cash/accrual deliberada por simplicidad; se documenta para que no
+ * se lea como un descuadre.
  */
 export default async function AdminFinanzasPage({
   searchParams,
@@ -72,6 +87,8 @@ export default async function AdminFinanzasPage({
   else if (periodo === "semestre") inicioPeriodo = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
   else if (periodo === "anio") inicioPeriodo = new Date(hoy.getFullYear(), 0, 1);
   else inicioPeriodo = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const mesesEnPeriodo =
+    (finPeriodo.getFullYear() - inicioPeriodo.getFullYear()) * 12 + (finPeriodo.getMonth() - inicioPeriodo.getMonth()) + 1;
 
   const mesActual = hoy.getMonth() + 1;
   const anioActual = hoy.getFullYear();
@@ -84,11 +101,24 @@ export default async function AdminFinanzasPage({
     { data: saldos },
     { count: pedidosEntregados },
     { data: paquetesActivos },
+    { data: configRaw },
+    { data: metaMes },
+    { data: activosFijos },
+    { data: cuentasBancarias },
+    { data: capitalMovimientos },
+    { data: gastosPendientes },
+    { data: pedidosPeriodoConCosto },
+    { data: comprasHistorico },
+    { data: gastosHistorico },
+    { data: pedidosHistoricoConCosto },
+    { data: usuariosTodos },
+    { data: comprasConPaquete },
+    { data: platillosActivos },
   ] = await Promise.all([
     admin.from("compras").select("monto_mxn, created_at").gte("created_at", inicioPeriodo.toISOString()).lte("created_at", finPeriodo.toISOString()),
     admin
       .from("gastos")
-      .select("id, descripcion, monto_mxn, fecha, proveedor, recurrente, categoria_id, categorias_gasto(nombre)")
+      .select("id, descripcion, monto_mxn, fecha, proveedor, recurrente, pagado, fecha_vencimiento, categoria_id, categorias_gasto(nombre)")
       .gte("fecha", toISODate(inicioPeriodo))
       .lte("fecha", toISODate(finPeriodo))
       .order("fecha", { ascending: false }),
@@ -97,6 +127,19 @@ export default async function AdminFinanzasPage({
     admin.from("saldo_creditos").select("usuario_id, saldo, usuarios(nombre)"),
     admin.from("pedidos").select("id", { count: "exact", head: true }).eq("estado", "entregado").gte("fecha_entrega", toISODate(inicioPeriodo)).lte("fecha_entrega", toISODate(finPeriodo)),
     admin.from("paquetes").select("precio_mxn, creditos").eq("activo", true),
+    admin.from("configuracion_financiera").select("isr_tasa_pct, capacidad_produccion_diaria").order("actualizado_en", { ascending: false }).limit(1).maybeSingle(),
+    admin.from("metas_mensuales").select("ingreso_meta_mxn, margen_meta_pct, gasto_operativo_max_mxn").eq("anio", anioActual).eq("mes", mesActual).maybeSingle(),
+    admin.from("activos_fijos").select("id, nombre, valor_compra_mxn, fecha_compra, vida_util_meses, activo").order("fecha_compra", { ascending: false }),
+    admin.from("cuentas_bancarias").select("id, nombre, saldo_mxn").order("nombre"),
+    admin.from("capital_movimientos").select("id, tipo, monto_mxn, fecha, nota").order("fecha", { ascending: false }),
+    admin.from("gastos").select("id, descripcion, monto_mxn, proveedor, fecha_vencimiento").eq("pagado", false).order("fecha_vencimiento", { ascending: true }),
+    admin.from("pedidos").select("platillo_id, platillos(costo_mxn)").eq("estado", "entregado").gte("fecha_entrega", toISODate(inicioPeriodo)).lte("fecha_entrega", toISODate(finPeriodo)),
+    admin.from("compras").select("monto_mxn"),
+    admin.from("gastos").select("monto_mxn"),
+    admin.from("pedidos").select("platillo_id, platillos(costo_mxn)").eq("estado", "entregado"),
+    admin.from("usuarios").select("id, created_at, activo, desactivado_en"),
+    admin.from("compras").select("usuario_id, monto_mxn, paquetes(creditos)"),
+    admin.from("platillos").select("costo_mxn").eq("activo", true),
   ]);
 
   type Gasto = {
@@ -106,6 +149,8 @@ export default async function AdminFinanzasPage({
     fecha: string;
     proveedor: string | null;
     recurrente: boolean;
+    pagado: boolean;
+    fecha_vencimiento: string | null;
     categoria_id: string | null;
     categorias_gasto: { nombre: string } | null;
   };
@@ -130,12 +175,114 @@ export default async function AdminFinanzasPage({
   const clientesConSaldo = (saldos ?? []).filter((s) => s.saldo > 0);
   const entregadas = pedidosEntregados ?? 0;
   const ingresoPorPorcion = entregadas > 0 ? Math.round(ingresos / entregadas) : 0;
-  // Mismo cálculo que A0 y Clientes: precio promedio ponderado por
-  // crédito entre los paquetes activos, para no inventar un factor.
   const creditosTotalesPaq = (paquetesActivos ?? []).reduce((acc, p) => acc + p.creditos, 0);
   const precioTotalPaq = (paquetesActivos ?? []).reduce((acc, p) => acc + p.precio_mxn, 0);
   const precioPromedioPorCredito = creditosTotalesPaq > 0 ? precioTotalPaq / creditosTotalesPaq : 0;
-  const valorPasivoEstimado = Math.round(saldoTotal * precioPromedioPorCredito);
+
+  // ---------- Pasivo de créditos: precio ponderado POR CLIENTE ----------
+  // En vez de un promedio global de paquetes activos, se usa el precio
+  // real que cada cliente pagó por sus créditos (histórico de sus
+  // compras), porque el pasivo es lo que YA se le cobró, no un precio
+  // de catálogo actual que puede haber cambiado.
+  const comprasPorUsuarioPasivo = new Map<string, { montoTotal: number; creditosTotal: number }>();
+  for (const c of comprasConPaquete ?? []) {
+    const creditos = (c.paquetes as unknown as { creditos: number } | null)?.creditos ?? 0;
+    const acc = comprasPorUsuarioPasivo.get(c.usuario_id) ?? { montoTotal: 0, creditosTotal: 0 };
+    acc.montoTotal += c.monto_mxn;
+    acc.creditosTotal += creditos;
+    comprasPorUsuarioPasivo.set(c.usuario_id, acc);
+  }
+  let valorPasivoEstimado = 0;
+  const clientesConSaldoDetalle = clientesConSaldo.map((s) => {
+    const hist = comprasPorUsuarioPasivo.get(s.usuario_id);
+    const precioPonderado = hist && hist.creditosTotal > 0 ? hist.montoTotal / hist.creditosTotal : precioPromedioPorCredito;
+    const valor = Math.round(s.saldo * precioPonderado);
+    valorPasivoEstimado += valor;
+    return { ...s, precioPonderado, valor };
+  });
+
+  // ---------- Configuración financiera ----------
+  const isrTasaPct = configRaw?.isr_tasa_pct ?? null;
+  const capacidadDiaria = configRaw?.capacidad_produccion_diaria ?? null;
+
+  // ---------- Costo de producción (real, por platillos entregados) ----------
+  const costoProduccionPeriodo = (pedidosPeriodoConCosto ?? []).reduce(
+    (acc, p) => acc + ((p.platillos as unknown as { costo_mxn: number | null } | null)?.costo_mxn ?? 0),
+    0,
+  );
+  const utilidadBruta = ingresos - costoProduccionPeriodo;
+
+  // ---------- Depreciación (real, de activos_fijos) ----------
+  const activosActivos = (activosFijos ?? []).filter((a) => a.activo);
+  let depreciacionPeriodo = 0;
+  for (const a of activosActivos) {
+    const fechaCompra = new Date(`${a.fecha_compra}T00:00:00`);
+    const mensual = a.valor_compra_mxn / a.vida_util_meses;
+    const yaTranscurridosAlIniciarPeriodo = mesesTranscurridos(fechaCompra, inicioPeriodo);
+    const mesesRestantesVidaUtil = Math.max(0, a.vida_util_meses - yaTranscurridosAlIniciarPeriodo);
+    const mesesADepreciarEnPeriodo = Math.min(mesesEnPeriodo, mesesRestantesVidaUtil);
+    depreciacionPeriodo += mensual * mesesADepreciarEnPeriodo;
+  }
+
+  // ---------- Cascada de P&L ----------
+  const ebit = utilidadBruta - totalGastos - depreciacionPeriodo;
+  const ebitda = ebit + depreciacionPeriodo;
+  const isrPeriodo = isrTasaPct != null && ebit > 0 ? ebit * (isrTasaPct / 100) : 0;
+  const utilidadNeta = ebit - isrPeriodo;
+
+  // ---------- Indicadores: LTV, churn, break-even, capacidad ----------
+  const ingresosHistoricoTotal = (comprasHistorico ?? []).reduce((acc, c) => acc + c.monto_mxn, 0);
+  const clientesConCompraTotal = comprasPorUsuarioPasivo.size;
+  const ltv = clientesConCompraTotal > 0 ? Math.round(ingresosHistoricoTotal / clientesConCompraTotal) : 0;
+
+  const clientesBaseChurn = (usuariosTodos ?? []).filter((u) => new Date(u.created_at) < inicioPeriodo).length;
+  const clientesDesactivadosPeriodo = (usuariosTodos ?? []).filter(
+    (u) => u.desactivado_en && new Date(u.desactivado_en) >= inicioPeriodo && new Date(u.desactivado_en) <= finPeriodo,
+  ).length;
+  const churnPct = clientesBaseChurn > 0 ? Math.round((clientesDesactivadosPeriodo / clientesBaseChurn) * 1000) / 10 : null;
+
+  const costoProduccionPromedioPorcion =
+    entregadas > 0
+      ? costoProduccionPeriodo / entregadas
+      : (platillosActivos ?? []).length > 0
+        ? (platillosActivos ?? []).reduce((acc, p) => acc + (p.costo_mxn ?? 0), 0) / (platillosActivos ?? []).length
+        : 0;
+  const margenContribucionPorcion = precioPromedioPorCredito - costoProduccionPromedioPorcion;
+  const costosFijosPeriodo = totalGastos + depreciacionPeriodo;
+  const breakEvenPorciones = margenContribucionPorcion > 0 ? Math.ceil(costosFijosPeriodo / margenContribucionPorcion) : null;
+  const breakEvenMxn = breakEvenPorciones != null ? Math.round(breakEvenPorciones * precioPromedioPorCredito) : null;
+
+  const diasEnPeriodo = Math.round((finPeriodo.getTime() - inicioPeriodo.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const promedioPorcionesDiarias = diasEnPeriodo > 0 ? entregadas / diasEnPeriodo : 0;
+  const utilizacionCapacidadPct = capacidadDiaria && capacidadDiaria > 0 ? Math.round((promedioPorcionesDiarias / capacidadDiaria) * 100) : null;
+
+  // ---------- Balance general ----------
+  const totalBancos = (cuentasBancarias ?? []).reduce((acc, c) => acc + c.saldo_mxn, 0);
+  let totalActivosFijosNetos = 0;
+  for (const a of activosActivos) {
+    const fechaCompra = new Date(`${a.fecha_compra}T00:00:00`);
+    const mensual = a.valor_compra_mxn / a.vida_util_meses;
+    const mesesDeprecHoy = Math.min(mesesTranscurridos(fechaCompra, hoy), a.vida_util_meses);
+    const depreciacionAcumulada = mensual * mesesDeprecHoy;
+    totalActivosFijosNetos += Math.max(0, a.valor_compra_mxn - depreciacionAcumulada);
+  }
+  const totalActivos = totalBancos + totalActivosFijosNetos;
+
+  const totalCxP = (gastosPendientes ?? []).reduce((acc, g) => acc + g.monto_mxn, 0);
+  const totalPasivos = totalCxP + valorPasivoEstimado;
+
+  const aportacionesNetas = (capitalMovimientos ?? []).reduce(
+    (acc, m) => acc + (m.tipo === "retiro" ? -m.monto_mxn : m.monto_mxn),
+    0,
+  );
+  const costoProduccionHistoricoTotal = (pedidosHistoricoConCosto ?? []).reduce(
+    (acc, p) => acc + ((p.platillos as unknown as { costo_mxn: number | null } | null)?.costo_mxn ?? 0),
+    0,
+  );
+  const gastosHistoricoTotal = (gastosHistorico ?? []).reduce((acc, g) => acc + g.monto_mxn, 0);
+  const utilidadAcumulada = ingresosHistoricoTotal - gastosHistoricoTotal - costoProduccionHistoricoTotal;
+  const totalCapital = aportacionesNetas + utilidadAcumulada;
+  const diferenciaNoConciliada = totalActivos - totalPasivos - totalCapital;
 
   const qs = (params: Record<string, string>) => {
     const merged = { vista, periodo, ...params };
@@ -147,7 +294,7 @@ export default async function AdminFinanzasPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-control border border-line bg-surface p-1">
           {PERIODOS.map((p) => (
-            <a
+            
               key={p.id}
               href={qs({ periodo: p.id })}
               className={`rounded-control px-3.5 py-2 text-[13px] font-medium ${
@@ -163,7 +310,7 @@ export default async function AdminFinanzasPage({
 
       <div className="flex flex-wrap items-center gap-1 overflow-x-auto">
         {TABS.map((t) => (
-          <a
+          
             key={t.id}
             href={qs({ vista: t.id })}
             className={`shrink-0 rounded-control px-3.5 py-2 text-[13px] font-medium ${
@@ -183,7 +330,41 @@ export default async function AdminFinanzasPage({
             <Kpi etiqueta="UTILIDAD" valor={`$${currency.format(utilidad)}`} nota={`margen ${margen}%`} />
             <Kpi etiqueta="CRÉDITOS PENDIENTES" valor={String(saldoTotal)} nota="vendidos sin consumir" />
           </div>
-          <NoDisponible titulo="Metas del mes" detalle="No hay tabla de metas/presupuesto configurada en la base de datos — esta sección del diseño (ingreso meta, margen meta, gasto operativo máx., etc.) necesitaría una tabla nueva de objetivos mensuales." />
+
+          <p className="text-[18px] font-medium text-cream">Meta del mes ({anioActual}-{pad(mesActual)})</p>
+          {metaMes && (metaMes.ingreso_meta_mxn != null || metaMes.margen_meta_pct != null || metaMes.gasto_operativo_max_mxn != null) && (
+            <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-3">
+              {metaMes.ingreso_meta_mxn != null && (
+                <Kpi
+                  etiqueta="INGRESO VS. META"
+                  valor={`$${currency.format(ingresos)} / $${currency.format(metaMes.ingreso_meta_mxn)}`}
+                  nota={ingresos >= metaMes.ingreso_meta_mxn ? "meta alcanzada" : `faltan $${currency.format(metaMes.ingreso_meta_mxn - ingresos)}`}
+                />
+              )}
+              {metaMes.margen_meta_pct != null && (
+                <Kpi
+                  etiqueta="MARGEN VS. META"
+                  valor={`${margen}% / ${metaMes.margen_meta_pct}%`}
+                  nota={margen >= metaMes.margen_meta_pct ? "meta alcanzada" : "por debajo de la meta"}
+                />
+              )}
+              {metaMes.gasto_operativo_max_mxn != null && (
+                <Kpi
+                  etiqueta="GASTO VS. TOPE"
+                  valor={`$${currency.format(totalGastos)} / $${currency.format(metaMes.gasto_operativo_max_mxn)}`}
+                  nota={totalGastos <= metaMes.gasto_operativo_max_mxn ? "dentro del tope" : "excedido"}
+                />
+              )}
+            </div>
+          )}
+          <MetaMensualForm
+            anio={anioActual}
+            mes={mesActual}
+            ingresoMetaActual={metaMes?.ingreso_meta_mxn ?? null}
+            margenMetaActual={metaMes?.margen_meta_pct ?? null}
+            gastoMaxActual={metaMes?.gasto_operativo_max_mxn ?? null}
+          />
+
           <p className="text-[18px] font-medium text-cream">Gastos por categoría</p>
           <CategoriasGrid categorias={categoriasOrdenadas} />
         </>
@@ -193,14 +374,33 @@ export default async function AdminFinanzasPage({
         <div className="flex max-w-[700px] flex-col gap-1 rounded-card border border-line bg-surface p-6">
           <p className="mb-2 text-[12px] font-medium uppercase tracking-[1px] text-gold">Estado de resultados</p>
           <PnlRow label="Ingresos (compras cobradas)" valor={ingresos} />
+          <PnlRow label="Costo de producción (platillos entregados)" valor={-costoProduccionPeriodo} />
+          <PnlDiv />
+          <PnlRow label="Utilidad bruta" valor={utilidadBruta} fuerte />
+          <PnlDiv />
           <PnlRow label="Gastos operativos" valor={-totalGastos} />
+          <PnlRow label="Depreciación" valor={-depreciacionPeriodo} />
           <PnlDiv />
-          <PnlRow label="Utilidad" valor={utilidad} fuerte />
+          <PnlRow label="EBIT" valor={ebit} fuerte />
+          <PnlRow label="+ Depreciación" valor={depreciacionPeriodo} />
+          <PnlRow label="EBITDA" valor={ebitda} fuerte />
           <PnlDiv />
-          <NoDisponible
-            titulo="Costo de producción, depreciación e ISR"
-            detalle="El Figma incluye costo de producción por platillo, depreciación de equipo, EBITDA/EBIT e ISR — ninguno existe en el esquema real (no hay costo por platillo, ni tabla de activos fijos, ni configuración de impuestos)."
-          />
+          {isrTasaPct != null ? (
+            <>
+              <PnlRow label={`ISR (${isrTasaPct}% sobre EBIT positivo)`} valor={-isrPeriodo} />
+              <PnlDiv />
+              <PnlRow label="Utilidad neta" valor={utilidadNeta} fuerte />
+            </>
+          ) : (
+            <NoDisponible
+              titulo="ISR y utilidad neta"
+              detalle="No has configurado una tasa de ISR todavía. Ve a la pestaña Indicadores para capturarla — en cuanto la guardes, este renglón se calcula solo."
+            />
+          )}
+          <p className="mt-2 text-[11px] leading-[16px] text-muted/70">
+            Los activos con costo de producción o valor de compra sin capturar no aportan a estos cálculos (se tratan como $0, no se
+            excluyen del conteo).
+          </p>
         </div>
       )}
 
@@ -218,41 +418,176 @@ export default async function AdminFinanzasPage({
       )}
 
       {vista === "indicadores" && (
-        <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Kpi etiqueta="TICKET PROMEDIO" valor={`$${currency.format(ticketPromedio)}`} nota="por compra" />
-          <Kpi etiqueta="INGRESO POR PORCIÓN" valor={`$${currency.format(ingresoPorPorcion)}`} nota={`${entregadas} porciones entregadas`} />
-          <Kpi
-            etiqueta="CAC (marketing)"
-            valor={gastoMarketing > 0 ? `$${currency.format(gastoMarketing)} gastado` : "—"}
-            nota={gastoMarketing > 0 ? "gasto en categoría Marketing" : "sin gastos de categoría Marketing"}
-          />
-          <div className="col-span-full">
-            <NoDisponible
-              titulo="LTV, churn, break-even y capacidad de producción"
-              detalle="Requieren datos que no existen todavía: historial de cancelación de clientes (churn), capacidad máxima de producción configurada, y costos fijos para calcular el punto de equilibrio."
+        <>
+          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Kpi etiqueta="TICKET PROMEDIO" valor={`$${currency.format(ticketPromedio)}`} nota="por compra" />
+            <Kpi etiqueta="INGRESO POR PORCIÓN" valor={`$${currency.format(ingresoPorPorcion)}`} nota={`${entregadas} porciones entregadas`} />
+            <Kpi
+              etiqueta="CAC (marketing)"
+              valor={gastoMarketing > 0 ? `$${currency.format(gastoMarketing)} gastado` : "—"}
+              nota={gastoMarketing > 0 ? "gasto en categoría Marketing" : "sin gastos de categoría Marketing"}
+            />
+            <Kpi etiqueta="LTV" valor={`$${currency.format(ltv)}`} nota={`ingreso histórico prom. / ${clientesConCompraTotal} clientes`} />
+            <Kpi
+              etiqueta="CHURN DEL PERÍODO"
+              valor={churnPct != null ? `${churnPct}%` : "—"}
+              nota={churnPct != null ? `${clientesDesactivadosPeriodo} de ${clientesBaseChurn} clientes se dieron de baja` : "sin clientes base para calcularlo"}
+            />
+            <Kpi
+              etiqueta="PUNTO DE EQUILIBRIO"
+              valor={breakEvenMxn != null ? `$${currency.format(breakEvenMxn)}` : "—"}
+              nota={breakEvenPorciones != null ? `${breakEvenPorciones} porciones/período` : "margen de contribución no positivo"}
+            />
+            <Kpi
+              etiqueta="CAPACIDAD DE PRODUCCIÓN"
+              valor={capacidadDiaria != null ? `${utilizacionCapacidadPct}%` : "—"}
+              nota={capacidadDiaria != null ? `${promedioPorcionesDiarias.toFixed(1)} de ${capacidadDiaria} porciones/día` : "configura la capacidad abajo"}
             />
           </div>
-        </div>
+          <ConfiguracionForm isrActual={isrTasaPct} capacidadActual={capacidadDiaria} />
+          <p className="text-[11px] leading-[16px] text-muted/70">
+            Supuestos: LTV usa el ingreso histórico total entre clientes con al menos una compra (no proyecta retención futura). Churn
+            compara clientes dados de baja en el período contra los que ya existían al inicio del período (necesitas marcar clientes
+            como inactivos en Clientes para que este número se mueva). Punto de equilibrio asume que todos los gastos registrados son
+            fijos (no hay clasificación fijo/variable en `gastos`) y usa el margen de contribución promedio por crédito.
+          </p>
+        </>
       )}
 
       {vista === "balance" && (
-        <NoDisponible
-          titulo="Balance general"
-          detalle="No hay ningún activo, pasivo ni capital registrado en la base de datos — este negocio no lleva contabilidad de balance todavía (solo ingresos por compras y gastos operativos). Construir esto necesitaría tablas nuevas de activos fijos, cuentas bancarias y capital."
-        />
+        <>
+          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-3">
+            <Kpi etiqueta="ACTIVOS" valor={`$${currency.format(Math.round(totalActivos))}`} nota="bancos + activos fijos netos" destacado />
+            <Kpi etiqueta="PASIVOS" valor={`$${currency.format(Math.round(totalPasivos))}`} nota="cuentas por pagar + créditos pendientes" />
+            <Kpi etiqueta="CAPITAL" valor={`$${currency.format(Math.round(totalCapital))}`} nota="aportaciones + utilidad acumulada" />
+          </div>
+          {Math.abs(diferenciaNoConciliada) > 1 && (
+            <NoDisponible
+              titulo="Diferencia no conciliada"
+              detalle={`Activos − Pasivos − Capital = $${currency.format(Math.round(diferenciaNoConciliada))}. No se fuerza a cuadrar en $0 porque la utilidad acumulada es una aproximación (usa el costo actual de cada platillo para pedidos entregados en el pasado, no el costo real que tenía cada mes) y probablemente falten saldos de arranque (banco/capital inicial) por capturar abajo.`}
+            />
+          )}
+
+          <p className="text-[18px] font-medium text-cream">Activos fijos</p>
+          <TablaActivosFijos activos={activosFijos ?? []} hoy={hoy} />
+          <ActivoFijoForm />
+
+          <p className="text-[18px] font-medium text-cream">Cuentas bancarias</p>
+          <div className="w-full overflow-x-auto rounded-card border border-line bg-surface">
+            <table className="w-full min-w-[500px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-line text-[10px] font-medium uppercase tracking-[1px] text-gold">
+                  <th className="px-5 py-3.5 font-medium">Cuenta</th>
+                  <th className="px-5 py-3.5 font-medium">Saldo</th>
+                  <th className="px-5 py-3.5 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(cuentasBancarias ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-5 py-8 text-center text-[14px] text-muted">
+                      Sin cuentas capturadas.
+                    </td>
+                  </tr>
+                ) : (
+                  (cuentasBancarias ?? []).map((c) => <CuentaBancariaFila key={c.id} cuenta={c} />)
+                )}
+              </tbody>
+            </table>
+          </div>
+          <CuentaBancariaForm />
+
+          <p className="text-[18px] font-medium text-cream">Capital (aportaciones y retiros de socios)</p>
+          <div className="w-full overflow-x-auto rounded-card border border-line bg-surface">
+            <table className="w-full min-w-[600px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-line text-[10px] font-medium uppercase tracking-[1px] text-gold">
+                  <th className="px-5 py-3.5 font-medium">Fecha</th>
+                  <th className="px-5 py-3.5 font-medium">Tipo</th>
+                  <th className="px-5 py-3.5 font-medium">Monto</th>
+                  <th className="px-5 py-3.5 font-medium">Nota</th>
+                  <th className="px-5 py-3.5 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(capitalMovimientos ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-8 text-center text-[14px] text-muted">
+                      Sin movimientos de capital registrados.
+                    </td>
+                  </tr>
+                ) : (
+                  (capitalMovimientos ?? []).map((m) => (
+                    <tr key={m.id} className="border-b border-line text-[13px] text-cream last:border-b-0">
+                      <td className="px-5 py-3.5">{fechaCorta.format(new Date(`${m.fecha}T00:00:00`))}</td>
+                      <td className="px-5 py-3.5 text-muted">{m.tipo === "retiro" ? "Retiro" : "Aportación"}</td>
+                      <td className="px-5 py-3.5">${currency.format(m.monto_mxn)}</td>
+                      <td className="px-5 py-3.5 text-muted">{m.nota ?? "—"}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <MovimientoCapitalEliminarBoton movimientoId={m.id} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <MovimientoCapitalForm />
+        </>
       )}
 
       {vista === "cxp" && (
-        <NoDisponible
-          titulo="Cuentas por pagar"
-          detalle="`gastos` no tiene un estatus de pagado/pendiente ni fecha de vencimiento — todo gasto registrado se asume ya pagado. Para cuentas por pagar reales haría falta agregar esas columnas."
-        />
+        <>
+          <Kpi
+            etiqueta="TOTAL PENDIENTE"
+            valor={`$${currency.format(totalCxP)}`}
+            nota={`${(gastosPendientes ?? []).length} gastos sin pagar`}
+            destacado
+          />
+          <p className="text-[18px] font-medium text-cream">Gastos pendientes de pago</p>
+          <div className="w-full overflow-x-auto rounded-card border border-line bg-surface">
+            <table className="w-full min-w-[600px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-line text-[10px] font-medium uppercase tracking-[1px] text-gold">
+                  <th className="px-5 py-3.5 font-medium">Descripción</th>
+                  <th className="px-5 py-3.5 font-medium">Proveedor</th>
+                  <th className="px-5 py-3.5 font-medium">Vence</th>
+                  <th className="px-5 py-3.5 font-medium">Monto</th>
+                  <th className="px-5 py-3.5 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(gastosPendientes ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-8 text-center text-[14px] text-muted">
+                      No hay gastos pendientes de pago.
+                    </td>
+                  </tr>
+                ) : (
+                  (gastosPendientes ?? []).map((g) => (
+                    <tr key={g.id} className="border-b border-line text-[13px] text-cream last:border-b-0">
+                      <td className="px-5 py-3.5">{g.descripcion}</td>
+                      <td className="px-5 py-3.5 text-muted">{g.proveedor ?? "—"}</td>
+                      <td className="px-5 py-3.5 text-muted">
+                        {g.fecha_vencimiento ? fechaCorta.format(new Date(`${g.fecha_vencimiento}T00:00:00`)) : "—"}
+                      </td>
+                      <td className="px-5 py-3.5">${currency.format(g.monto_mxn)}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <GastoPagadoBoton gastoId={g.id} pagado={false} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {vista === "gastos" && (
         <>
           <div className="w-full overflow-x-auto rounded-card border border-line bg-surface">
-            <table className="w-full min-w-[760px] border-collapse text-left">
+            <table className="w-full min-w-[860px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-line text-[10px] font-medium uppercase tracking-[1px] text-gold">
                   <th className="px-5 py-3.5 font-medium">Fecha</th>
@@ -260,13 +595,14 @@ export default async function AdminFinanzasPage({
                   <th className="px-5 py-3.5 font-medium">Categoría</th>
                   <th className="px-5 py-3.5 font-medium">Proveedor</th>
                   <th className="px-5 py-3.5 font-medium">Monto</th>
+                  <th className="px-5 py-3.5 font-medium">Estado</th>
                   <th className="px-5 py-3.5 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
                 {listaGastos.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-[14px] text-muted">
+                    <td colSpan={7} className="px-5 py-10 text-center text-[14px] text-muted">
                       Sin gastos registrados en este período.
                     </td>
                   </tr>
@@ -282,16 +618,10 @@ export default async function AdminFinanzasPage({
                       <td className="px-5 py-3.5 text-muted">{g.proveedor ?? "—"}</td>
                       <td className="px-5 py-3.5">${currency.format(g.monto_mxn)}</td>
                       <td className="px-5 py-3.5">
-                        <form
-                          action={async () => {
-                            "use server";
-                            await eliminarGasto(g.id);
-                          }}
-                        >
-                          <button type="submit" className="text-[12px] text-muted hover:text-danger">
-                            Eliminar
-                          </button>
-                        </form>
+                        <GastoPagadoBoton gastoId={g.id} pagado={g.pagado} />
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <GastoEliminarBoton gastoId={g.id} />
                       </td>
                     </tr>
                   ))
@@ -301,47 +631,7 @@ export default async function AdminFinanzasPage({
           </div>
 
           <p className="text-[18px] font-medium text-cream">Registrar gasto</p>
-          <form
-            action={async (formData: FormData) => {
-              "use server";
-              await registrarGasto(formData);
-            }}
-            className="flex w-full max-w-[700px] flex-col gap-4 rounded-card border border-line bg-surface p-6"
-          >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Campo label="Descripción">
-                <input name="descripcion" required placeholder="Meta Ads — campaña septiembre" className="input" />
-              </Campo>
-              <Campo label="Monto (MXN)">
-                <input name="monto_mxn" type="number" min="0" step="0.01" required placeholder="1200" className="input" />
-              </Campo>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Campo label="Categoría">
-                <select name="categoria_id" className="input">
-                  <option value="">Sin categoría</option>
-                  {(categorias ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
-              </Campo>
-              <Campo label="Fecha">
-                <input name="fecha" type="date" required defaultValue={toISODate(hoy)} className="input" />
-              </Campo>
-            </div>
-            <Campo label="Proveedor / plataforma (opcional)">
-              <input name="proveedor" placeholder="Meta Platforms" className="input" />
-            </Campo>
-            <label className="flex items-center gap-2.5 text-[14px] text-cream">
-              <input type="checkbox" name="recurrente" className="size-[16px]" />
-              Gasto recurrente mensual
-            </label>
-            <button type="submit" className="btn-primary w-full rounded-control py-3 text-[14px]">
-              Guardar gasto
-            </button>
-          </form>
+          <GastoForm categorias={categorias ?? []} hoyISO={toISODate(hoy)} />
 
           <p className="text-[18px] font-medium text-cream">Cierre mensual</p>
           <div className="flex max-w-[560px] flex-col gap-3 rounded-card border border-line bg-surface p-6">
@@ -350,29 +640,7 @@ export default async function AdminFinanzasPage({
                 ? `${anioActual}-${pad(mesActual)} cerrado${mesContable.cerrado_en ? ` el ${fechaCorta.format(new Date(mesContable.cerrado_en))}` : ""}.`
                 : `${anioActual}-${pad(mesActual)} sigue abierto.`}
             </p>
-            {mesContable?.cerrado ? (
-              <form
-                action={async () => {
-                  "use server";
-                  await reabrirMesContable(anioActual, mesActual);
-                }}
-              >
-                <button type="submit" className="btn-secondary rounded-control px-6 py-3 text-[14px]">
-                  Reabrir mes
-                </button>
-              </form>
-            ) : (
-              <form
-                action={async () => {
-                  "use server";
-                  await cerrarMesContable(anioActual, mesActual);
-                }}
-              >
-                <button type="submit" className="btn-primary rounded-control px-6 py-3 text-[14px]">
-                  Cerrar mes
-                </button>
-              </form>
-            )}
+            <CierreMesBoton anio={anioActual} mes={mesActual} cerrado={mesContable?.cerrado ?? false} />
           </div>
         </>
       )}
@@ -381,32 +649,36 @@ export default async function AdminFinanzasPage({
         <>
           <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-3">
             <Kpi etiqueta="CRÉDITOS SIN CONSUMIR" valor={String(saldoTotal)} nota={`${clientesConSaldo.length} clientes con saldo`} destacado />
-            <Kpi etiqueta="VALOR ESTIMADO" valor={`$${currency.format(valorPasivoEstimado)}`} nota="créditos × precio prom. por crédito" />
+            <Kpi etiqueta="VALOR ESTIMADO" valor={`$${currency.format(valorPasivoEstimado)}`} nota="créditos × precio pagado por cada cliente" />
             <Kpi etiqueta="INGRESOS DEL PERÍODO" valor={`$${currency.format(ingresos)}`} nota="ya cobrados en Stripe" />
           </div>
           <p className="text-[18px] font-medium text-cream">Clientes con créditos pendientes</p>
           <div className="w-full overflow-x-auto rounded-card border border-line bg-surface">
-            <table className="w-full min-w-[400px] border-collapse text-left">
+            <table className="w-full min-w-[560px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-line text-[10px] font-medium uppercase tracking-[1px] text-gold">
                   <th className="px-5 py-3.5 font-medium">Cliente</th>
                   <th className="px-5 py-3.5 font-medium">Créditos</th>
+                  <th className="px-5 py-3.5 font-medium">Precio ponderado/crédito</th>
+                  <th className="px-5 py-3.5 font-medium">Valor</th>
                 </tr>
               </thead>
               <tbody>
-                {clientesConSaldo.length === 0 ? (
+                {clientesConSaldoDetalle.length === 0 ? (
                   <tr>
-                    <td colSpan={2} className="px-5 py-8 text-center text-[14px] text-muted">
+                    <td colSpan={4} className="px-5 py-8 text-center text-[14px] text-muted">
                       Ningún cliente tiene créditos pendientes.
                     </td>
                   </tr>
                 ) : (
-                  clientesConSaldo
-                    .sort((a, b) => b.saldo - a.saldo)
+                  clientesConSaldoDetalle
+                    .sort((a, b) => b.valor - a.valor)
                     .map((s) => (
                       <tr key={s.usuario_id} className="border-b border-line text-[13px] text-cream last:border-b-0">
                         <td className="px-5 py-3">{(s.usuarios as unknown as { nombre: string } | null)?.nombre ?? "—"}</td>
                         <td className="px-5 py-3">{s.saldo}</td>
+                        <td className="px-5 py-3 text-muted">${s.precioPonderado.toFixed(0)}</td>
+                        <td className="px-5 py-3">${currency.format(s.valor)}</td>
                       </tr>
                     ))
                 )}
@@ -462,17 +734,66 @@ function PnlDiv() {
 function NoDisponible({ titulo, detalle }: { titulo: string; detalle: string }) {
   return (
     <div className="flex flex-col gap-1.5 rounded-card border border-dashed border-line/70 bg-transparent px-5 py-4">
-      <p className="text-[13px] font-medium text-muted">{titulo} — no disponible</p>
+      <p className="text-[13px] font-medium text-muted">{titulo}</p>
       <p className="text-[12px] leading-[18px] text-muted/80">{detalle}</p>
     </div>
   );
 }
 
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
+function TablaActivosFijos({
+  activos,
+  hoy,
+}: {
+  activos: { id: string; nombre: string; valor_compra_mxn: number; fecha_compra: string; vida_util_meses: number; activo: boolean }[];
+  hoy: Date;
+}) {
   return (
-    <label className="flex flex-col gap-2">
-      <span className="text-[12px] font-medium text-muted">{label}</span>
-      {children}
-    </label>
+    <div className="w-full overflow-x-auto rounded-card border border-line bg-surface">
+      <table className="w-full min-w-[760px] border-collapse text-left">
+        <thead>
+          <tr className="border-b border-line text-[10px] font-medium uppercase tracking-[1px] text-gold">
+            <th className="px-5 py-3.5 font-medium">Nombre</th>
+            <th className="px-5 py-3.5 font-medium">Valor de compra</th>
+            <th className="px-5 py-3.5 font-medium">Depreciación acumulada</th>
+            <th className="px-5 py-3.5 font-medium">Valor neto</th>
+            <th className="px-5 py-3.5 font-medium">Estado</th>
+            <th className="px-5 py-3.5 font-medium"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {activos.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="px-5 py-8 text-center text-[14px] text-muted">
+                Sin activos fijos capturados.
+              </td>
+            </tr>
+          ) : (
+            activos.map((a) => {
+              const fechaCompra = new Date(`${a.fecha_compra}T00:00:00`);
+              const mensual = a.valor_compra_mxn / a.vida_util_meses;
+              const mesesDeprec = Math.min(mesesTranscurridos(fechaCompra, hoy), a.vida_util_meses);
+              const depreciacionAcumulada = mensual * mesesDeprec;
+              const valorNeto = Math.max(0, a.valor_compra_mxn - depreciacionAcumulada);
+              return (
+                <tr key={a.id} className="border-b border-line text-[13px] text-cream last:border-b-0">
+                  <td className="px-5 py-3.5 font-medium">{a.nombre}</td>
+                  <td className="px-5 py-3.5">${currency.format(a.valor_compra_mxn)}</td>
+                  <td className="px-5 py-3.5 text-muted">${currency.format(Math.round(depreciacionAcumulada))}</td>
+                  <td className="px-5 py-3.5">${currency.format(Math.round(valorNeto))}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={`pill border ${a.activo ? "border-success text-success" : "border-line text-muted"}`}>
+                      {a.activo ? "Activo" : "Baja"}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
+                    <ActivoFijoActivoBoton activoId={a.id} activo={a.activo} />
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
