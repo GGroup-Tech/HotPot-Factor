@@ -16,6 +16,15 @@ const CAROUSEL_INTERVAL_MS = 3000;
  * Hero — Figma node 244:14. El diseño trae una sola imagen; el brief
  * pide un carrusel automático de 3s, así que rotamos entre las fotos
  * en /public/hero (el cliente debe reemplazarlas por fotografía real).
+ *
+ * Columna de texto (556px) e imagen (tope 720px, proporción 560:500
+ * fija) son del tamaño exacto del Figma — a diferencia de las grillas
+ * (Cómo funciona, Paquetes, Menú semanal), este Hero es una
+ * composición asimétrica de dos piezas pensada para ese ancho
+ * específico, no algo que deba estirarse. Por eso la fila va dentro de
+ * un `max-w-[1440px] mx-auto`: en monitores anchos se centra en vez de
+ * quedarse pegada a la izquierda con el carrusel estirado fuera de
+ * proporción (que fue el defecto reportado 2026-08-13).
  */
 export function Hero() {
   const [index, setIndex] = useState(0);
@@ -28,8 +37,9 @@ export function Hero() {
   }, []);
 
   return (
-    <section className="flex flex-col items-center gap-10 px-6 pb-16 pt-14 md:px-10 md:pt-20 lg:flex-row lg:items-center lg:gap-16 lg:px-[100px] lg:pb-[104px] lg:pt-24">
-      <div className="flex w-full flex-col items-start gap-7 lg:w-[38%] lg:min-w-[420px] lg:shrink-0">
+    <section className="px-6 pb-16 pt-14 md:px-10 md:pt-20 lg:px-[100px] lg:pb-[104px] lg:pt-24">
+    <div className="mx-auto flex w-full max-w-[1440px] flex-col items-center gap-10 lg:flex-row lg:items-center lg:gap-16">
+      <div className="flex w-full flex-col items-start gap-7 lg:w-[556px] lg:shrink-0">
         <div className="rounded-pill border border-line px-4 py-[9px]">
           <p className="text-[12px] font-medium tracking-[1.2px] text-gold">
             COMIDA REAL, LISTA PARA TU SEMANA
@@ -64,7 +74,7 @@ export function Hero() {
           ))}
         </div>
       </div>
-      <div className="relative aspect-[560/500] w-full flex-1 overflow-hidden rounded-card-lg bg-raised">
+      <div className="relative aspect-[560/500] w-full max-w-[720px] flex-1 overflow-hidden rounded-card-lg bg-raised">
         {HERO_IMAGES.map((src, i) => (
           <Image
             key={src}
@@ -88,6 +98,7 @@ export function Hero() {
           ))}
         </div>
       </div>
+    </div>
     </section>
   );
 }
