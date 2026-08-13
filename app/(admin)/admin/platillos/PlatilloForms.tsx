@@ -4,6 +4,18 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { crearPlatillo, actualizarPlatillo, alternarPlatilloActivo } from "../../actions";
 
+/**
+ * Componentes cliente para el catálogo de platillos — mismo patrón
+ * (useTransition + error visible) que `app/(admin)/admin/menu/MenuClientForms.tsx`,
+ * para no repetir el problema de botones que fallan en silencio.
+ *
+ * `CrearPlatilloForm` vive en su propia pantalla (`/admin/platillos/nuevo`)
+ * y `EditarPlatilloForm` en `/admin/platillos/[id]/editar` — antes el
+ * alta era un formulario metido al fondo de la lista sin un botón real
+ * que llevara ahí, y no existía forma de editar un platillo ya creado
+ * (solo activar/desactivar). Reportado por el usuario 2026-08-13.
+ */
+
 type PlatilloData = {
   id: string;
   nombre: string;
@@ -17,6 +29,7 @@ type PlatilloData = {
   fibra_g: number | null;
   sodio_mg: number | null;
   alergenos: string | null;
+  costo_mxn: number | null;
   activo: boolean;
 };
 
@@ -74,6 +87,9 @@ export function CrearPlatilloForm() {
       </div>
       <Campo label="Alérgenos (opcional)">
         <input name="alergenos" placeholder="Contiene: trigo (gluten), huevo" className="input" />
+      </Campo>
+      <Campo label="Costo de producción por porción (MXN, opcional)">
+        <input name="costo_mxn" type="number" min="0" step="0.01" placeholder="65.00" className="input" />
       </Campo>
       <button type="submit" disabled={pending} className="btn-primary w-full rounded-control py-3 text-[14px] disabled:opacity-40">
         {pending ? "Creando…" : "Crear platillo"}
@@ -141,6 +157,9 @@ export function EditarPlatilloForm({ platillo }: { platillo: PlatilloData }) {
       </div>
       <Campo label="Alérgenos (opcional)">
         <input name="alergenos" defaultValue={platillo.alergenos ?? ""} placeholder="Contiene: trigo (gluten), huevo" className="input" />
+      </Campo>
+      <Campo label="Costo de producción por porción (MXN, opcional)">
+        <input name="costo_mxn" type="number" min="0" step="0.01" defaultValue={platillo.costo_mxn ?? ""} placeholder="65.00" className="input" />
       </Campo>
       <label className="flex items-center gap-2.5 text-[14px] text-cream">
         <input type="checkbox" name="activo" defaultChecked={platillo.activo} className="size-[16px]" />
