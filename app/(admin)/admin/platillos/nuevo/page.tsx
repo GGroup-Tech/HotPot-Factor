@@ -2,7 +2,6 @@ import Link from "next/link";
 import { requireStaff } from "@/lib/supabase/staff";
 import { CrearPlatilloForm } from "../PlatilloForms";
 
-/** Pantalla dedicada para dar de alta un platillo — ver nota en `../page.tsx`. */
 export default async function NuevoPlatilloPage() {
   await requireStaff();
 
