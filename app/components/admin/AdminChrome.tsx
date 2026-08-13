@@ -20,6 +20,7 @@ const TITULOS: { href: string; titulo: string; exact: boolean }[] = [
   { href: "/admin/pedidos", titulo: "Pedidos", exact: false },
   { href: "/admin/clientes", titulo: "Clientes", exact: false },
   { href: "/admin/menu", titulo: "Menú del mes", exact: false },
+  { href: "/admin/platillos", titulo: "Platillos", exact: false },
   { href: "/admin/produccion", titulo: "Producción", exact: false },
   { href: "/admin/reparto", titulo: "Reparto", exact: false },
   { href: "/admin/finanzas", titulo: "Finanzas", exact: false },
