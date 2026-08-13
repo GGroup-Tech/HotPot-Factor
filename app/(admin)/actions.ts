@@ -361,6 +361,17 @@ export async function actualizarPlatillo(platilloId: string, formData: FormData)
   return { ok: true };
 }
 
+/** Activa/desactiva un platillo (no lo borra — puede estar referenciado en pedidos pasados). */
+export async function alternarPlatilloActivo(platilloId: string, activo: boolean): Promise<AccionAdminResult> {
+  await requireStaff();
+  const admin = createAdminClient();
+  const { error } = await admin.from("platillos").update({ activo }).eq("id", platilloId);
+  if (error) return { ok: false, error: "No se pudo actualizar el platillo." };
+  revalidatePath("/admin/platillos");
+  revalidatePath("/admin/menu");
+  return { ok: true };
+}
+
 /**
  * Copia el menú fijo y los comodines del mes anterior al mes actual
  * (atajo "Copiar del mes pasado" en el Figma). No copia `publicado`
