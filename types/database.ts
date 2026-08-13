@@ -77,7 +77,7 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["paquetes"]["Row"]>;
         Relationships: [];
       };
-  platillos: {
+ platillos: {
         // Esquema real confirmado 2026-08-13 vía information_schema.columns
         // (nunca se había verificado — el comentario original de este
         // archivo decía "confirmar al regenerar tipos" y no se hizo).
@@ -98,6 +98,15 @@ export interface Database {
           proteina_g: number | null;
           carbs_g: number | null;
           grasa_g: number | null;
+          // Agregadas 2026-08-13 para que coincidan con la tabla de
+          // información nutrimental real del recetario (Energía,
+          // Proteína, Carbohidratos, Grasa total, Grasa saturada,
+          // Fibra, Sodio, Alérgenos) — antes solo se capturaban 4 de
+          // los 7 datos nutrimentales.
+          grasa_saturada_g: number | null;
+          fibra_g: number | null;
+          sodio_mg: number | null;
+          alergenos: string | null;
           activo: boolean;
           creado_en: string | null;
         };
