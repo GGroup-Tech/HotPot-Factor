@@ -1,30 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   actualizarMenuDia,
   agregarComodinMes,
   quitarComodinMes,
   copiarMenuMesPasado,
   publicarMenu,
+  crearPlatillo,
 } from "../../actions";
-
-/**
- * Versión cliente de los controles de Menú del mes. Antes estos eran
- * `<form action={async () => { "use server"; ... }}>` inline dentro de
- * la página (Server Component) — el usuario reportó 2026-08-13 que
- * clickear Guardar/Agregar "no hacía nada en absoluto": ni carga, ni
- * cambio, ni error. Con ese patrón, cualquier falla (de auth, de red,
- * de origen/CSRF de Server Actions detrás de un dominio de Vercel, lo
- * que sea) es invisible — no había ningún manejo de error del lado
- * del cliente.
- *
- * Este archivo mueve la interacción a componentes cliente con
- * `useTransition`, el mismo patrón ya probado y funcionando en
- * `app/components/calendario/DiaCelda.tsx`: ahora cualquier error se
- * muestra en pantalla en vez de fallar en silencio, y hay un estado
- * de "Guardando…" visible mientras se procesa.
- */
 
 type Platillo = { id: string; nombre: string };
 
@@ -179,7 +164,85 @@ export function ComodinQuitarBoton({
   );
 }
 
-/** Botones de página completa: "Copiar del mes pasado" y "Publicar menú". */
+export function NuevoPlatilloInline() {
+  const router = useRouter();
+  const [abierto, setAbierto] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    setError(null);
+    startTransition(async () => {
+      const res = await crearPlatillo(formData);
+      if (!res.ok) {
+        setError(res.error ?? "No se pudo crear el platillo.");
+      } else {
+        setAbierto(false);
+        router.refresh();
+      }
+    });
+  }
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        className="btn-secondary w-fit rounded-control px-4 py-2.5 text-[13px]"
+      >
+        + Nuevo platillo
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex w-full max-w-[700px] flex-col gap-4 rounded-card border border-line bg-surface p-5">
+      <div className="flex items-center justify-between">
+        <p className="text-[15px] font-medium text-cream">Nuevo platillo</p>
+        <button type="button" onClick={() => setAbierto(false)} className="text-[12px] text-muted hover:text-cream">
+          Cancelar
+        </button>
+      </div>
+      <label className="flex flex-col gap-2">
+        <span className="text-[12px] font-medium text-muted">Nombre</span>
+        <input name="nombre" required placeholder="Pollo a la plancha con arroz" className="input" />
+      </label>
+      <label className="flex flex-col gap-2">
+        <span className="text-[12px] font-medium text-muted">Descripción (opcional)</span>
+        <input name="descripcion" placeholder="Pechuga a la plancha, arroz integral y verduras salteadas" className="input" />
+      </label>
+      <label className="flex flex-col gap-2">
+        <span className="text-[12px] font-medium text-muted">Foto (opcional, PNG o JPEG)</span>
+        <input name="foto" type="file" accept="image/png,image/jpeg" className="input" />
+      </label>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <label className="flex flex-col gap-2">
+          <span className="text-[12px] font-medium text-muted">Calorías</span>
+          <input name="calorias" type="number" min="0" placeholder="450" className="input" />
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="text-[12px] font-medium text-muted">Proteína (g)</span>
+          <input name="proteina_g" type="number" min="0" placeholder="35" className="input" />
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="text-[12px] font-medium text-muted">Carbs (g)</span>
+          <input name="carbs_g" type="number" min="0" placeholder="40" className="input" />
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="text-[12px] font-medium text-muted">Grasa (g)</span>
+          <input name="grasa_g" type="number" min="0" placeholder="12" className="input" />
+        </label>
+      </div>
+      <button type="submit" disabled={pending} className="btn-primary w-full rounded-control py-3 text-[14px] disabled:opacity-40">
+        {pending ? "Creando…" : "Crear platillo"}
+      </button>
+      {error && <p className="text-[12px] text-danger">{error}</p>}
+    </form>
+  );
+}
+
 export function AccionMenuBoton({
   tipo,
   anio,
