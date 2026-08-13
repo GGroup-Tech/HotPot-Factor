@@ -1,10 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
 
-/** Footer — Figma node 244:195. */
+/**
+ * Footer — Figma node 244:195. Igual que el Hero, es una fila de
+ * piezas de tamaño fijo con `justify-between` — en monitores anchos
+ * eso separaba demasiado las columnas, así que va dentro del mismo
+ * `max-w-[1440px] mx-auto` que el resto de las composiciones fijas.
+ */
 export function Footer() {
   return (
-    <footer className="flex flex-col gap-14 px-6 pb-11 pt-16 md:px-10 lg:px-[100px] lg:pt-20">
+    <footer className="px-6 pb-11 pt-16 md:px-10 lg:px-[100px] lg:pt-20">
+    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-14">
       <div className="flex flex-col flex-wrap items-start justify-between gap-10 md:flex-row md:gap-12">
         <div className="flex w-full max-w-[320px] md:w-[320px] flex-col gap-4">
           <Image
@@ -35,7 +41,7 @@ export function Footer() {
           <Link href="/#nosotros" className="text-[15px] text-muted hover:text-cream">
             Nosotros
           </Link>
-          <span className="text-[15px] text-muted">Zonas de cobertura</span>
+          <span className="text-[15px] text-muted">Blog</span>
         </div>
         <div className="flex flex-col gap-[14px]">
           <p className="text-eyebrow text-gold">CONTACTO</p>
@@ -59,6 +65,7 @@ export function Footer() {
           </Link>
         </div>
       </div>
+    </div>
     </footer>
   );
 }
