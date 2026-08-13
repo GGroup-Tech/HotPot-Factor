@@ -11,9 +11,13 @@ import { DIAS_SEMANA_LARGO } from "@/lib/calendario";
  * cliente. Compartido entre el flujo de compra (`/arma-tu-mes`) y el
  * panel de cliente (`/cuenta/calendario`).
  *
- * Tarjetas de 200×96px fijas (no flex-1) para calzar exacto con el
- * diseño — antes eran flexibles y el grid se veía "desfasado" contra
- * el mock.
+ * Tarjetas de 96px de alto fijo, pero de ancho fluido (`flex-1
+ * min-w-[200px]`, decisión explícita del usuario 2026-08-13): 200px es
+ * el piso que calza con el mock de Figma, pero en monitores anchos las
+ * 5 columnas se reparten el ancho completo disponible en vez de dejar
+ * espacio muerto a la derecha. (Antes eran `w-[200px]` fijas a secas;
+ * eso fue una corrección anterior para un desfase visual puntual, no
+ * un requisito de que fueran literalmente 200px siempre.)
  */
 export function Calendario({
   semanas,
@@ -29,7 +33,7 @@ export function Calendario({
       <div className="flex w-fit min-w-full flex-col gap-2.5">
         <div className="flex gap-3">
           {DIAS_SEMANA_LARGO.map((h) => (
-            <div key={h} className="w-[200px] shrink-0 pl-1">
+            <div key={h} className="min-w-[200px] flex-1 pl-1">
               <p className="text-[10px] font-medium tracking-[0.8px] text-muted">{h}</p>
             </div>
           ))}
@@ -45,7 +49,7 @@ export function Calendario({
                   platillosComodin={platillosComodin}
                 />
               ) : (
-                <div key={j} className="h-[96px] w-[200px] shrink-0" />
+                <div key={j} className="h-[96px] min-w-[200px] flex-1" />
               ),
             )}
           </div>
