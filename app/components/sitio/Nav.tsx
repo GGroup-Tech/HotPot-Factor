@@ -2,7 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
-/** Nav — Figma node 244:3. Mismo header en Landing v2 y en 01-05. */
+/**
+ * Nav — Figma node 244:3. Mismo header en Landing v2 y en 01-05.
+ * `sticky top-0` para que se quede fijo arriba al hacer scroll (pedido
+ * explícito del usuario 2026-08-13) — necesita su propio fondo
+ * (`bg-ink`) y borde inferior porque ya no hay un div separado debajo
+ * haciendo esa línea (ver page.tsx).
+ */
 export async function Nav() {
   const supabase = await createClient();
   const {
@@ -10,7 +16,7 @@ export async function Nav() {
   } = await supabase.auth.getUser();
 
   return (
-    <header className="flex items-center justify-between px-6 md:px-10 lg:px-[100px] py-[26px]">
+    <header className="sticky top-0 z-50 flex items-center justify-between border-b border-line bg-ink px-6 py-[26px] md:px-10 lg:px-[100px]">
       <Link href="/" aria-label="HotPot Factor" className="flex items-center">
         <Image
           src="/logo-cream.png"
