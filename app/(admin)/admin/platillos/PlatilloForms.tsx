@@ -40,8 +40,8 @@ export function CrearPlatilloForm() {
       <Campo label="Descripción (opcional)">
         <input name="descripcion" placeholder="Pechuga a la plancha, arroz integral y verduras salteadas" className="input" />
       </Campo>
-      <Campo label="URL de foto (opcional)">
-        <input name="foto_url" placeholder="https://…" className="input" />
+      <Campo label="Foto (opcional, PNG o JPEG)">
+        <input name="foto" type="file" accept="image/png,image/jpeg" className="input" />
       </Campo>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Campo label="Calorías">
@@ -89,9 +89,13 @@ export function EditarPlatilloForm({ platillo }: { platillo: PlatilloData }) {
       <Campo label="Descripción (opcional)">
         <input name="descripcion" defaultValue={platillo.descripcion ?? ""} className="input" />
       </Campo>
-      <Campo label="URL de foto (opcional)">
-        <input name="foto_url" defaultValue={platillo.foto_url ?? ""} className="input" />
+      {platillo.foto_url && (
+        <img src={platillo.foto_url} alt={platillo.nombre} className="h-28 w-28 rounded-control object-cover" />
+      )}
+      <Campo label={platillo.foto_url ? "Reemplazar foto (opcional, PNG o JPEG)" : "Foto (opcional, PNG o JPEG)"}>
+        <input name="foto" type="file" accept="image/png,image/jpeg" className="input" />
       </Campo>
+      <input type="hidden" name="foto_url_actual" defaultValue={platillo.foto_url ?? ""} />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Campo label="Calorías">
           <input name="calorias" type="number" min="0" defaultValue={platillo.calorias ?? ""} className="input" />
