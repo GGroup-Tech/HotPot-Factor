@@ -4,18 +4,6 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { crearPlatillo, actualizarPlatillo, alternarPlatilloActivo } from "../../actions";
 
-/**
- * Componentes cliente para el catálogo de platillos — mismo patrón
- * (useTransition + error visible) que `app/(admin)/admin/menu/MenuClientForms.tsx`,
- * para no repetir el problema de botones que fallan en silencio.
- *
- * `CrearPlatilloForm` vive en su propia pantalla (`/admin/platillos/nuevo`)
- * y `EditarPlatilloForm` en `/admin/platillos/[id]/editar` — antes el
- * alta era un formulario metido al fondo de la lista sin un botón real
- * que llevara ahí, y no existía forma de editar un platillo ya creado
- * (solo activar/desactivar). Reportado por el usuario 2026-08-13.
- */
-
 type PlatilloData = {
   id: string;
   nombre: string;
