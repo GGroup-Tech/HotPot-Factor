@@ -1,11 +1,5 @@
 import Image from "next/image";
 
-/**
- * Esquema real confirmado 2026-08-13: `foto_url` (no `imagen_url`),
- * `calorias` (no `kcal`), `carbs_g` (no `carbohidratos_g`). No existe
- * columna `etiqueta` en la base — el badge tipo "ALTO EN PROTEÍNA" se
- * quitó del todo en vez de fingir un dato que no existe.
- */
 export interface PlatilloCardData {
   id: string;
   nombre: string;
@@ -15,10 +9,22 @@ export interface PlatilloCardData {
   proteina_g: number | null;
   carbs_g: number | null;
   grasa_g: number | null;
+  grasa_saturada_g: number | null;
+  fibra_g: number | null;
+  sodio_mg: number | null;
+  alergenos: string | null;
 }
 
 /** Tarjeta de platillo del menú semanal — Figma node 244:131 y análogas. */
 export function PlatilloCard({ platillo }: { platillo: PlatilloCardData }) {
+  const tieneNutricion =
+    platillo.proteina_g != null ||
+    platillo.carbs_g != null ||
+    platillo.grasa_g != null ||
+    platillo.grasa_saturada_g != null ||
+    platillo.fibra_g != null ||
+    platillo.sodio_mg != null;
+
   return (
     <div className="flex w-full flex-col overflow-hidden rounded-card-lg border border-line bg-surface">
       <div className="relative h-[180px] w-full bg-raised">
@@ -35,23 +41,39 @@ export function PlatilloCard({ platillo }: { platillo: PlatilloCardData }) {
           <span className="num text-gold">1 crédito</span>
           {platillo.calorias != null && <span>{platillo.calorias} kcal</span>}
         </div>
-        {(platillo.proteina_g != null || platillo.carbs_g != null || platillo.grasa_g != null) && (
-          <div className="grid grid-cols-3 gap-2 border-t border-line pt-3 text-center">
-            <div>
-              <p className="num text-[14px] text-cream">{platillo.proteina_g ?? "—"}g</p>
-              <p className="text-[11px] text-muted">Proteína</p>
+        {tieneNutricion && (
+          <div className="flex flex-col gap-2 border-t border-line pt-3">
+            <p className="text-[10px] font-medium uppercase tracking-[0.6px] text-gold">
+              Información nutrimental · por porción
+            </p>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <DatoNutricional valor={platillo.proteina_g} unidad="g" etiqueta="Proteína" />
+              <DatoNutricional valor={platillo.carbs_g} unidad="g" etiqueta="Carbs" />
+              <DatoNutricional valor={platillo.grasa_g} unidad="g" etiqueta="Grasa" />
+              <DatoNutricional valor={platillo.grasa_saturada_g} unidad="g" etiqueta="G. sat." />
             </div>
-            <div>
-              <p className="num text-[14px] text-cream">{platillo.carbs_g ?? "—"}g</p>
-              <p className="text-[11px] text-muted">Carbs</p>
-            </div>
-            <div>
-              <p className="num text-[14px] text-cream">{platillo.grasa_g ?? "—"}g</p>
-              <p className="text-[11px] text-muted">Grasa</p>
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <DatoNutricional valor={platillo.fibra_g} unidad="g" etiqueta="Fibra" />
+              <DatoNutricional valor={platillo.sodio_mg} unidad="mg" etiqueta="Sodio" />
             </div>
           </div>
         )}
+        {platillo.alergenos && (
+          <p className="border-t border-line pt-3 text-[12px] leading-[18px] text-muted">
+            <span className="font-medium text-cream">Alérgenos: </span>
+            {platillo.alergenos}
+          </p>
+        )}
       </div>
+    </div>
+  );
+}
+
+function DatoNutricional({ valor, unidad, etiqueta }: { valor: number | null; unidad: string; etiqueta: string }) {
+  return (
+    <div>
+      <p className="num text-[14px] text-cream">{valor != null ? `${valor}${unidad}` : "—"}</p>
+      <p className="text-[11px] text-muted">{etiqueta}</p>
     </div>
   );
 }
