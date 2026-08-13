@@ -8,7 +8,10 @@ import { ClienteChrome } from "@/app/components/cliente/ClienteChrome";
  * compras. `requireUsuario()` es defensa en profundidad — middleware.ts
  * ya protege /cuenta/* a nivel de sesión, esto además confirma que
  * exista la fila en `usuarios` antes de pintar cualquier dato.
- * Mismo límite de ancho (1440px, el frame de Figma) que `(sitio)`.
+ * Por decisión explícita del usuario (2026-08-13): ya no se limita a
+ * 1440px fijos, igual que `(sitio)` y `(admin)` — `ClienteChrome` ya
+ * reparte sidebar fijo + contenido `flex-1`, así que llena cualquier
+ * ancho de pantalla sin dejar franjas vacías.
  */
 export default async function ClienteLayout({ children }: { children: React.ReactNode }) {
   const { user, usuario } = await requireUsuario();
@@ -21,10 +24,8 @@ export default async function ClienteLayout({ children }: { children: React.Reac
     .maybeSingle();
 
   return (
-    <div className="mx-auto max-w-[1440px]">
-      <ClienteChrome nombre={usuario.nombre} saldo={saldoRow?.saldo ?? 0}>
-        {children}
-      </ClienteChrome>
-    </div>
+    <ClienteChrome nombre={usuario.nombre} saldo={saldoRow?.saldo ?? 0}>
+      {children}
+    </ClienteChrome>
   );
 }
