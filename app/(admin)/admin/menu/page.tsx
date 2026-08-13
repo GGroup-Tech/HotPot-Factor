@@ -1,7 +1,7 @@
 import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DIAS_SEMANA_LARGO, MESES } from "@/lib/calendario";
-import { actualizarMenuDia, agregarComodinMes, quitarComodinMes, copiarMenuMesPasado, publicarMenu } from "../../actions";
+import { DiaMenuForm, ComodinAgregarForm, ComodinQuitarBoton, AccionMenuBoton } from "./MenuClientForms";
 
 const fechaLarga = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long" });
 
@@ -9,6 +9,12 @@ const fechaLarga = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "lo
  * A3 — Admin · Menú del mes. Figma node 250:2. Edición real del menú
  * fijo por día de la semana y los comodines del mes — no un mockup:
  * cada cambio escribe directo a `menu_mes`/`comodines_mes`.
+ *
+ * Los controles (Guardar/Agregar/Quitar/Copiar/Publicar) viven en
+ * `MenuClientForms.tsx` como componentes cliente con `useTransition` —
+ * antes eran `<form action={...}>` de servidor inline, que el usuario
+ * reportó como "no hacen nada" al hacer click (2026-08-13): sin manejo
+ * de error del lado del cliente, cualquier falla quedaba invisible.
  */
 export default async function AdminMenuPage({
   searchParams,
@@ -33,18 +39,18 @@ export default async function AdminMenuPage({
   const [{ data: menuRaw }, { data: comodinesRaw }, { data: platillos }] = await Promise.all([
     admin
       .from("menu_mes")
-      .select("dia_semana, publicado, publicado_en, platillo_id, platillos(id, nombre, descripcion, kcal, proteina_g, carbohidratos_g, grasa_g)")
+      .select("dia_semana, publicado, publicado_en, platillo_id, platillos(id, nombre, descripcion, calorias, proteina_g, carbs_g, grasa_g)")
       .eq("anio", anio)
       .eq("mes", mesNum),
     admin
       .from("comodines_mes")
-      .select("platillo_id, platillos(id, nombre, descripcion, kcal, proteina_g, carbohidratos_g, grasa_g)")
+      .select("platillo_id, platillos(id, nombre, descripcion, calorias, proteina_g, carbs_g, grasa_g)")
       .eq("anio", anio)
       .eq("mes", mesNum),
     admin.from("platillos").select("id, nombre").eq("activo", true).order("nombre"),
   ]);
 
-  const menuPorDia = new Map<number, { platilloId: string; platillo: { nombre: string; descripcion: string | null; kcal: number | null; proteina_g: number | null; carbohidratos_g: number | null; grasa_g: number | null } | null }>();
+  const menuPorDia = new Map<number, { platilloId: string; platillo: { nombre: string; descripcion: string | null; calorias: number | null; proteina_g: number | null; carbs_g: number | null; grasa_g: number | null } | null }>();
   let publicado = false;
   let publicadoEn: string | null = null;
   for (const f of menuRaw ?? []) {
@@ -75,27 +81,23 @@ export default async function AdminMenuPage({
             ›
           </a>
         </div>
-        <div className="flex gap-2.5">
-          <form
-            action={async () => {
-              "use server";
-              await copiarMenuMesPasado(anio, mesNum);
-            }}
-          >
-            <button type="submit" className="btn-secondary rounded-control px-4 py-2.5 text-[13px]">
-              Copiar del mes pasado
-            </button>
-          </form>
-          <form
-            action={async () => {
-              "use server";
-              await publicarMenu(anio, mesNum);
-            }}
-          >
-            <button type="submit" className="btn-primary rounded-control px-4 py-2.5 text-[13px]">
-              Publicar menú
-            </button>
-          </form>
+        <div className="flex items-start gap-2.5">
+          <AccionMenuBoton
+            tipo="copiar"
+            anio={anio}
+            mesNum={mesNum}
+            label="Copiar del mes pasado"
+            pendingLabel="Copiando…"
+            className="btn-secondary rounded-control px-4 py-2.5 text-[13px]"
+          />
+          <AccionMenuBoton
+            tipo="publicar"
+            anio={anio}
+            mesNum={mesNum}
+            label="Publicar menú"
+            pendingLabel="Publicando…"
+            className="btn-primary rounded-control px-4 py-2.5 text-[13px]"
+          />
         </div>
       </div>
 
@@ -126,11 +128,11 @@ export default async function AdminMenuPage({
                   {actual.platillo.descripcion && (
                     <p className="text-[12px] leading-[18px] text-muted">{actual.platillo.descripcion}</p>
                   )}
-                  {actual.platillo.kcal != null && (
+                  {actual.platillo.calorias != null && (
                     <div className="flex justify-between border-t border-line pt-2 text-center text-[11px] text-cream">
-                      <span>{actual.platillo.kcal}kcal</span>
+                      <span>{actual.platillo.calorias}kcal</span>
                       <span>{actual.platillo.proteina_g}g prot</span>
-                      <span>{actual.platillo.carbohidratos_g}g carb</span>
+                      <span>{actual.platillo.carbs_g}g carb</span>
                       <span>{actual.platillo.grasa_g}g grasa</span>
                     </div>
                   )}
@@ -138,32 +140,13 @@ export default async function AdminMenuPage({
               ) : (
                 <p className="text-[13px] italic text-muted">Sin platillo asignado</p>
               )}
-              <form
-                action={async (formData: FormData) => {
-                  "use server";
-                  const platilloId = String(formData.get("platilloId"));
-                  if (platilloId) await actualizarMenuDia(anio, mesNum, diaNum, platilloId);
-                }}
-                className="flex gap-1.5"
-              >
-                <select
-                  name="platilloId"
-                  defaultValue={actual?.platilloId ?? ""}
-                  className="w-full rounded-control border border-line bg-ink px-2 py-1.5 text-[12px] text-cream"
-                >
-                  <option value="" disabled>
-                    Elegir platillo…
-                  </option>
-                  {(platillos ?? []).map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre}
-                    </option>
-                  ))}
-                </select>
-                <button type="submit" className="shrink-0 rounded-control border border-line px-2.5 py-1.5 text-[11px] text-cream hover:border-gold/50">
-                  Guardar
-                </button>
-              </form>
+              <DiaMenuForm
+                anio={anio}
+                mesNum={mesNum}
+                diaNum={diaNum}
+                platillos={platillos ?? []}
+                defaultPlatilloId={actual?.platilloId ?? ""}
+              />
             </div>
           );
         })}
@@ -181,46 +164,18 @@ export default async function AdminMenuPage({
               <p className="text-[15px] font-medium text-cream">{c.platillo?.nombre}</p>
               {c.platillo?.descripcion && <p className="text-[12px] text-muted">{c.platillo.descripcion}</p>}
             </div>
-            <form
-              action={async () => {
-                "use server";
-                await quitarComodinMes(anio, mesNum, c.platilloId);
-              }}
-            >
-              <button type="submit" className="shrink-0 rounded-control border border-line px-3 py-2 text-[12px] text-cream hover:border-danger/60">
-                Quitar
-              </button>
-            </form>
+            <ComodinQuitarBoton anio={anio} mesNum={mesNum} platilloId={c.platilloId} />
           </div>
         ))}
         {comodines.length === 0 && (
           <p className="text-[13px] text-muted">Todavía no hay comodines configurados para {nombreMes.toLowerCase()}.</p>
         )}
       </div>
-      <form
-        action={async (formData: FormData) => {
-          "use server";
-          const platilloId = String(formData.get("platilloId"));
-          if (platilloId) await agregarComodinMes(anio, mesNum, platilloId);
-        }}
-        className="flex max-w-[420px] gap-2"
-      >
-        <select name="platilloId" defaultValue="" className="w-full rounded-control border border-line bg-surface px-3 py-2.5 text-[13px] text-cream">
-          <option value="" disabled>
-            Agregar comodín…
-          </option>
-          {(platillos ?? [])
-            .filter((p) => !comodines.some((c) => c.platilloId === p.id))
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
-              </option>
-            ))}
-        </select>
-        <button type="submit" className="btn-secondary shrink-0 rounded-control px-4 py-2.5 text-[13px]">
-          Agregar
-        </button>
-      </form>
+      <ComodinAgregarForm
+        anio={anio}
+        mesNum={mesNum}
+        platillos={(platillos ?? []).filter((p) => !comodines.some((c) => c.platilloId === p.id))}
+      />
     </div>
   );
 }
