@@ -4,6 +4,7 @@ import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { EditarPlatilloForm } from "../../PlatilloForms";
 
+/** Pantalla dedicada para editar un platillo existente — ver nota en `../../page.tsx`. */
 export default async function EditarPlatilloPage({ params }: { params: Promise<{ id: string }> }) {
   await requireStaff();
   const { id } = await params;
@@ -12,7 +13,7 @@ export default async function EditarPlatilloPage({ params }: { params: Promise<{
   const { data: platillo } = await admin
     .from("platillos")
     .select(
-      "id, nombre, descripcion, foto_url, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, activo",
+      "id, nombre, descripcion, foto_url, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, costo_mxn, activo",
     )
     .eq("id", id)
     .maybeSingle();
