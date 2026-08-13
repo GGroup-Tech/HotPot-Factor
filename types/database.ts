@@ -40,6 +40,11 @@ export interface Database {
           colonia: string | null;
           direccion: string | null;
           activo: boolean;
+          // Agregada 2026-08-13 para poder calcular churn real en
+          // Finanzas — se llena cuando staff desactiva al cliente
+          // (ver `alternarClienteActivo` en actions.ts) y se limpia si
+          // se reactiva.
+          desactivado_en: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["usuarios"]["Row"]> & {
@@ -77,7 +82,7 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["paquetes"]["Row"]>;
         Relationships: [];
       };
- platillos: {
+      platillos: {
         // Esquema real confirmado 2026-08-13 vía information_schema.columns
         // (nunca se había verificado — el comentario original de este
         // archivo decía "confirmar al regenerar tipos" y no se hizo).
@@ -107,6 +112,10 @@ export interface Database {
           fibra_g: number | null;
           sodio_mg: number | null;
           alergenos: string | null;
+          // Agregada 2026-08-13 para poder calcular costo de
+          // producción / margen / punto de equilibrio en Finanzas —
+          // costo de ingredientes + mano de obra por porción.
+          costo_mxn: number | null;
           activo: boolean;
           creado_en: string | null;
         };
@@ -330,6 +339,10 @@ export interface Database {
           mes_contable: number;
           anio_contable: number;
           registrado_por: string | null; // staff.id
+          // Agregadas 2026-08-13 para Cuentas por pagar — antes todo
+          // gasto se asumía pagado al capturarse.
+          pagado: boolean;
+          fecha_vencimiento: string | null;
           creado_en: string;
         };
         Insert: Partial<Database["public"]["Tables"]["gastos"]["Row"]>;
@@ -355,6 +368,77 @@ export interface Database {
         };
         Insert: Partial<Database["public"]["Tables"]["meses_contables"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["meses_contables"]["Row"]>;
+        Relationships: [];
+      };
+      // 5 tablas agregadas 2026-08-13 para las secciones de Finanzas
+      // que antes mostraban "no disponible" (Metas del mes, costo de
+      // producción/depreciación/ISR, balance general, cuentas por
+      // pagar). Esquema propio (no había nada que "confirmar" — se
+      // crearon a propósito para esto), documentado en el chat con el
+      // usuario cuando se dieron de alta.
+      metas_mensuales: {
+        Row: {
+          id: string;
+          anio: number;
+          mes: number; // 1-12
+          ingreso_meta_mxn: number | null;
+          margen_meta_pct: number | null;
+          gasto_operativo_max_mxn: number | null;
+          creado_en: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["metas_mensuales"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["metas_mensuales"]["Row"]>;
+        Relationships: [];
+      };
+      activos_fijos: {
+        Row: {
+          id: string;
+          nombre: string;
+          valor_compra_mxn: number;
+          fecha_compra: string; // date
+          vida_util_meses: number;
+          activo: boolean;
+          creado_en: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["activos_fijos"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["activos_fijos"]["Row"]>;
+        Relationships: [];
+      };
+      // Tabla singleton — siempre se usa la fila más reciente
+      // (`order("actualizado_en", { ascending: false }).limit(1)`).
+      configuracion_financiera: {
+        Row: {
+          id: string;
+          isr_tasa_pct: number | null;
+          capacidad_produccion_diaria: number | null;
+          actualizado_en: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["configuracion_financiera"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["configuracion_financiera"]["Row"]>;
+        Relationships: [];
+      };
+      cuentas_bancarias: {
+        Row: {
+          id: string;
+          nombre: string;
+          saldo_mxn: number;
+          actualizado_en: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["cuentas_bancarias"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["cuentas_bancarias"]["Row"]>;
+        Relationships: [];
+      };
+      capital_movimientos: {
+        Row: {
+          id: string;
+          tipo: string; // 'aportacion' | 'retiro'
+          monto_mxn: number;
+          fecha: string; // date
+          nota: string | null;
+          creado_en: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["capital_movimientos"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["capital_movimientos"]["Row"]>;
         Relationships: [];
       };
       pagos_procesados: {
