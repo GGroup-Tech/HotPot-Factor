@@ -1,37 +1,51 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { crearPlatillo, alternarPlatilloActivo } from "../../actions";
+import { useRouter } from "next/navigation";
+import { crearPlatillo, actualizarPlatillo, alternarPlatilloActivo } from "../../actions";
 
 /**
  * Componentes cliente para el catálogo de platillos — mismo patrón
  * (useTransition + error visible) que `app/(admin)/admin/menu/MenuClientForms.tsx`,
  * para no repetir el problema de botones que fallan en silencio.
+ *
+ * `CrearPlatilloForm` vive en su propia pantalla (`/admin/platillos/nuevo`)
+ * y `EditarPlatilloForm` en `/admin/platillos/[id]/editar` — antes el
+ * alta era un formulario metido al fondo de la lista sin un botón real
+ * que llevara ahí, y no existía forma de editar un platillo ya creado
+ * (solo activar/desactivar). Reportado por el usuario 2026-08-13.
  */
 
+type PlatilloData = {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  foto_url: string | null;
+  calorias: number | null;
+  proteina_g: number | null;
+  carbs_g: number | null;
+  grasa_g: number | null;
+  activo: boolean;
+};
+
 export function CrearPlatilloForm() {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
-  const [key, setKey] = useState(0); // fuerza re-mount del form para limpiarlo tras crear
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     setError(null);
-    setOk(false);
     startTransition(async () => {
       const res = await crearPlatillo(formData);
       if (!res.ok) setError(res.error ?? "No se pudo crear el platillo.");
-      else {
-        setOk(true);
-        setKey((k) => k + 1);
-      }
+      else router.push("/admin/platillos");
     });
   }
 
   return (
-    <form key={key} onSubmit={onSubmit} className="flex w-full max-w-[700px] flex-col gap-4 rounded-card border border-line bg-surface p-6">
+    <form onSubmit={onSubmit} className="flex w-full max-w-[700px] flex-col gap-4 rounded-card border border-line bg-surface p-6">
       <Campo label="Nombre">
         <input name="nombre" required placeholder="Pollo a la plancha con arroz" className="input" />
       </Campo>
@@ -59,7 +73,59 @@ export function CrearPlatilloForm() {
         {pending ? "Creando…" : "Crear platillo"}
       </button>
       {error && <p className="text-[12px] text-danger">{error}</p>}
-      {ok && !error && <p className="text-[12px] text-success">Platillo creado.</p>}
+    </form>
+  );
+}
+
+export function EditarPlatilloForm({ platillo }: { platillo: PlatilloData }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    setError(null);
+    startTransition(async () => {
+      const res = await actualizarPlatillo(platillo.id, formData);
+      if (!res.ok) setError(res.error ?? "No se pudo guardar.");
+      else router.push("/admin/platillos");
+    });
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex w-full max-w-[700px] flex-col gap-4 rounded-card border border-line bg-surface p-6">
+      <Campo label="Nombre">
+        <input name="nombre" required defaultValue={platillo.nombre} className="input" />
+      </Campo>
+      <Campo label="Descripción (opcional)">
+        <input name="descripcion" defaultValue={platillo.descripcion ?? ""} className="input" />
+      </Campo>
+      <Campo label="URL de foto (opcional)">
+        <input name="foto_url" defaultValue={platillo.foto_url ?? ""} className="input" />
+      </Campo>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Campo label="Calorías">
+          <input name="calorias" type="number" min="0" defaultValue={platillo.calorias ?? ""} className="input" />
+        </Campo>
+        <Campo label="Proteína (g)">
+          <input name="proteina_g" type="number" min="0" defaultValue={platillo.proteina_g ?? ""} className="input" />
+        </Campo>
+        <Campo label="Carbs (g)">
+          <input name="carbs_g" type="number" min="0" defaultValue={platillo.carbs_g ?? ""} className="input" />
+        </Campo>
+        <Campo label="Grasa (g)">
+          <input name="grasa_g" type="number" min="0" defaultValue={platillo.grasa_g ?? ""} className="input" />
+        </Campo>
+      </div>
+      <label className="flex items-center gap-2.5 text-[14px] text-cream">
+        <input type="checkbox" name="activo" defaultChecked={platillo.activo} className="size-[16px]" />
+        Activo (visible para asignar en menús/comodines)
+      </label>
+      <button type="submit" disabled={pending} className="btn-primary w-full rounded-control py-3 text-[14px] disabled:opacity-40">
+        {pending ? "Guardando…" : "Guardar cambios"}
+      </button>
+      {error && <p className="text-[12px] text-danger">{error}</p>}
     </form>
   );
 }
