@@ -4,7 +4,6 @@ import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { EditarPlatilloForm } from "../../PlatilloForms";
 
-/** Pantalla dedicada para editar un platillo existente — ver nota en `../../page.tsx`. */
 export default async function EditarPlatilloPage({ params }: { params: Promise<{ id: string }> }) {
   await requireStaff();
   const { id } = await params;
