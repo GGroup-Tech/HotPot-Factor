@@ -13,6 +13,10 @@ type PlatilloData = {
   proteina_g: number | null;
   carbs_g: number | null;
   grasa_g: number | null;
+  grasa_saturada_g: number | null;
+  fibra_g: number | null;
+  sodio_mg: number | null;
+  alergenos: string | null;
   activo: boolean;
 };
 
@@ -57,6 +61,20 @@ export function CrearPlatilloForm() {
           <input name="grasa_g" type="number" min="0" placeholder="12" className="input" />
         </Campo>
       </div>
+      <div className="grid grid-cols-3 gap-4">
+        <Campo label="Grasa saturada (g)">
+          <input name="grasa_saturada_g" type="number" min="0" placeholder="4" className="input" />
+        </Campo>
+        <Campo label="Fibra (g)">
+          <input name="fibra_g" type="number" min="0" placeholder="5" className="input" />
+        </Campo>
+        <Campo label="Sodio (mg)">
+          <input name="sodio_mg" type="number" min="0" placeholder="800" className="input" />
+        </Campo>
+      </div>
+      <Campo label="Alérgenos (opcional)">
+        <input name="alergenos" placeholder="Contiene: trigo (gluten), huevo" className="input" />
+      </Campo>
       <button type="submit" disabled={pending} className="btn-primary w-full rounded-control py-3 text-[14px] disabled:opacity-40">
         {pending ? "Creando…" : "Crear platillo"}
       </button>
@@ -110,6 +128,20 @@ export function EditarPlatilloForm({ platillo }: { platillo: PlatilloData }) {
           <input name="grasa_g" type="number" min="0" defaultValue={platillo.grasa_g ?? ""} className="input" />
         </Campo>
       </div>
+      <div className="grid grid-cols-3 gap-4">
+        <Campo label="Grasa saturada (g)">
+          <input name="grasa_saturada_g" type="number" min="0" defaultValue={platillo.grasa_saturada_g ?? ""} className="input" />
+        </Campo>
+        <Campo label="Fibra (g)">
+          <input name="fibra_g" type="number" min="0" defaultValue={platillo.fibra_g ?? ""} className="input" />
+        </Campo>
+        <Campo label="Sodio (mg)">
+          <input name="sodio_mg" type="number" min="0" defaultValue={platillo.sodio_mg ?? ""} className="input" />
+        </Campo>
+      </div>
+      <Campo label="Alérgenos (opcional)">
+        <input name="alergenos" defaultValue={platillo.alergenos ?? ""} placeholder="Contiene: trigo (gluten), huevo" className="input" />
+      </Campo>
       <label className="flex items-center gap-2.5 text-[14px] text-cream">
         <input type="checkbox" name="activo" defaultChecked={platillo.activo} className="size-[16px]" />
         Activo (visible para asignar en menús/comodines)
