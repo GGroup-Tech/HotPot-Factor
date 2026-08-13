@@ -77,27 +77,29 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["paquetes"]["Row"]>;
         Relationships: [];
       };
-      platillos: {
+  platillos: {
+        // Esquema real confirmado 2026-08-13 vía information_schema.columns
+        // (nunca se había verificado — el comentario original de este
+        // archivo decía "confirmar al regenerar tipos" y no se hizo).
+        // Nombres reales, distintos a lo que se había asumido: `foto_url`
+        // (no `imagen_url`), `calorias` (no `kcal`), `carbs_g` (no
+        // `carbohidratos_g`). Las columnas `categoria`, `etiqueta` y
+        // `disponible_comodin` NO EXISTEN — se habían inventado sin
+        // verificar, y como se usaban dentro de `.select("platillos(...)")`
+        // anidados, causaban que PostgREST rechazara la consulta COMPLETA
+        // (error 400, no solo un campo null) — esto rompía en silencio el
+        // menú semanal del sitio público y "Menú del mes" en el admin.
         Row: {
           id: string;
           nombre: string;
           descripcion: string | null;
-          imagen_url: string | null;
-          categoria: string | null;
-          // Nutrición — el Figma (Landing v2, sección Menú semanal) muestra
-          // kcal + macros por platillo; no estaban en la lista de columnas
-          // del brief, así que se agregan como opcionales. Confirmar con
-          // el esquema real al regenerar los tipos.
-          etiqueta: string | null; // "ALTO EN PROTEÍNA", "VEGETARIANO", etc.
-          kcal: number | null;
+          foto_url: string | null;
+          calorias: number | null;
           proteina_g: number | null;
-          carbohidratos_g: number | null;
+          carbs_g: number | null;
           grasa_g: number | null;
-          // "Arma tu mes" (Figma 108:2) ofrece un par de platillos
-          // comodín distintos al menú fijo semanal — se asume esta
-          // bandera para poder consultarlos. Confirmar con el cliente.
-          disponible_comodin: boolean | null;
           activo: boolean;
+          creado_en: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["platillos"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["platillos"]["Row"]>;
