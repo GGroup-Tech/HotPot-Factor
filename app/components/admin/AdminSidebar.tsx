@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/admin/pedidos", label: "Pedidos", exact: false },
   { href: "/admin/clientes", label: "Clientes", exact: false },
   { href: "/admin/menu", label: "Menú del mes", exact: false },
+  { href: "/admin/platillos", label: "Platillos", exact: false },
   { href: "/admin/produccion", label: "Producción", exact: false },
   { href: "/admin/reparto", label: "Reparto", exact: false },
   { href: "/admin/finanzas", label: "Finanzas", exact: false },
