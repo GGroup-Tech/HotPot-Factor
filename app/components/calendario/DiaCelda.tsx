@@ -64,13 +64,13 @@ export function DiaCelda({
   const nombreMostrado = dia.pedido?.platilloNombre ?? dia.platilloFijo?.nombre ?? null;
 
   return (
-    <div className="relative w-[200px] shrink-0">
+    <div className="relative min-w-[200px] flex-1">
       <button
         type="button"
         disabled={!clicable}
         onClick={() => clicable && setMenuAbierto((o) => !o)}
         className={clsx(
-          "flex h-[96px] w-[200px] flex-col items-start gap-1.5 rounded-card-sm border px-3 py-2.5 text-left transition-colors",
+          "flex h-[96px] w-full flex-col items-start gap-1.5 rounded-card-sm border px-3 py-2.5 text-left transition-colors",
           !dia.editable && "cursor-not-allowed border-disabled bg-surface",
           dia.editable && sinOpciones && "cursor-default border-dashed border-line/70 bg-transparent",
           dia.editable && !sinOpciones && asignado && "border-[1.5px] border-gold bg-raised",
