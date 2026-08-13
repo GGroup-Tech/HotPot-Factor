@@ -319,12 +319,43 @@ export async function crearPlatillo(formData: FormData): Promise<AccionAdminResu
   return { ok: true };
 }
 
-/** Activa/desactiva un platillo (no lo borra — puede estar referenciado en pedidos pasados). */
-export async function alternarPlatilloActivo(platilloId: string, activo: boolean): Promise<AccionAdminResult> {
+/**
+ * Actualiza los datos de un platillo existente (pantalla "Editar" en
+ * `/admin/platillos/[id]/editar`). Mismo esquema real que `crearPlatillo`.
+ */
+export async function actualizarPlatillo(platilloId: string, formData: FormData): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
-  const { error } = await admin.from("platillos").update({ activo }).eq("id", platilloId);
+
+  const nombre = String(formData.get("nombre") ?? "").trim();
+  const descripcion = String(formData.get("descripcion") ?? "").trim() || null;
+  const fotoUrl = String(formData.get("foto_url") ?? "").trim() || null;
+  const caloriasStr = String(formData.get("calorias") ?? "");
+  const proteinaStr = String(formData.get("proteina_g") ?? "");
+  const carbsStr = String(formData.get("carbs_g") ?? "");
+  const grasaStr = String(formData.get("grasa_g") ?? "");
+  const activo = formData.get("activo") === "on";
+
+  if (!nombre) return { ok: false, error: "El nombre es obligatorio." };
+
+  const aEntero = (s: string) => (s.trim() === "" ? null : Number.isFinite(Number(s)) ? Math.round(Number(s)) : null);
+
+  const { error } = await admin
+    .from("platillos")
+    .update({
+      nombre,
+      descripcion,
+      foto_url: fotoUrl,
+      calorias: aEntero(caloriasStr),
+      proteina_g: aEntero(proteinaStr),
+      carbs_g: aEntero(carbsStr),
+      grasa_g: aEntero(grasaStr),
+      activo,
+    })
+    .eq("id", platilloId);
+
   if (error) return { ok: false, error: "No se pudo actualizar el platillo." };
+
   revalidatePath("/admin/platillos");
   revalidatePath("/admin/menu");
   return { ok: true };
