@@ -9,7 +9,7 @@ export default async function AdminPlatillosPage() {
 
   const { data: platillosRaw } = await admin
     .from("platillos")
-    .select("id, nombre, descripcion, calorias, proteina_g, carbs_g, grasa_g, activo")
+    .select("id, nombre, descripcion, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, activo")
     .order("nombre");
 
   const platillos = platillosRaw ?? [];
@@ -27,12 +27,13 @@ export default async function AdminPlatillosPage() {
       </div>
 
       <div className="w-full overflow-x-auto rounded-card border border-line bg-surface">
-        <table className="w-full min-w-[820px] border-collapse text-left">
+        <table className="w-full min-w-[1080px] border-collapse text-left">
           <thead>
             <tr className="border-b border-line text-[10px] font-medium uppercase tracking-[1px] text-gold">
               <th className="px-5 py-3.5 font-medium">Nombre</th>
               <th className="px-5 py-3.5 font-medium">Descripción</th>
               <th className="px-5 py-3.5 font-medium">Nutrición</th>
+              <th className="px-5 py-3.5 font-medium">Alérgenos</th>
               <th className="px-5 py-3.5 font-medium">Estado</th>
               <th className="px-5 py-3.5 font-medium"></th>
               <th className="px-5 py-3.5 font-medium"></th>
@@ -41,7 +42,7 @@ export default async function AdminPlatillosPage() {
           <tbody>
             {platillos.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-[14px] text-muted">
+                <td colSpan={7} className="px-5 py-10 text-center text-[14px] text-muted">
                   Todavía no hay platillos en el catálogo.
                 </td>
               </tr>
@@ -49,12 +50,13 @@ export default async function AdminPlatillosPage() {
               platillos.map((p) => (
                 <tr key={p.id} className="border-b border-line text-[13px] text-cream last:border-b-0">
                   <td className="px-5 py-3.5 font-medium">{p.nombre}</td>
-                  <td className="max-w-[240px] px-5 py-3.5 text-muted">{p.descripcion ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-muted">
+                  <td className="max-w-[220px] px-5 py-3.5 text-muted">{p.descripcion ?? "—"}</td>
+                  <td className="max-w-[280px] px-5 py-3.5 text-muted">
                     {p.calorias != null
-                      ? `${p.calorias}kcal · ${p.proteina_g ?? 0}g prot · ${p.carbs_g ?? 0}g carb · ${p.grasa_g ?? 0}g grasa`
+                      ? `${p.calorias}kcal · ${p.proteina_g ?? 0}g prot · ${p.carbs_g ?? 0}g carb · ${p.grasa_g ?? 0}g grasa · ${p.grasa_saturada_g ?? 0}g sat · ${p.fibra_g ?? 0}g fibra · ${p.sodio_mg ?? 0}mg sodio`
                       : "—"}
                   </td>
+                  <td className="max-w-[160px] px-5 py-3.5 text-muted">{p.alergenos ?? "—"}</td>
                   <td className="px-5 py-3.5">
                     <span className={`pill border ${p.activo ? "border-success text-success" : "border-line text-muted"}`}>
                       {p.activo ? "Activo" : "Inactivo"}
