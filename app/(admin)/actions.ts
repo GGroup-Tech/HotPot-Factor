@@ -17,25 +17,6 @@ export interface AccionAdminResult {
   error?: string;
 }
 
-/**
- * Publica el menú fijo de un mes (`menu_mes.publicado = true`), que es
- * lo que hace visible ese menú a los clientes en "Arma tu mes" /
- * "Mi calendario" (ver `lib/calendario.ts` — solo cuenta filas con
- * `publicado = true`). Botón "Publicar" / "Publicar menú de {mes}" en
- * el Panel (A0) y en Menú del mes.
- *
- * Usa el cliente admin (service role) a propósito: `requireStaff()`
- * ya verificó arriba que quien llama es staff, así que este UPDATE no
- * depende de que exista una policy de RLS para staff en `menu_mes`
- * (el mismo tipo de gap que rompió "Mi perfil" y cancelar/editar
- * pedidos — ver `lib/supabase/admin.ts`). Toda escritura nueva del
- * panel admin sigue este mismo patrón.
- *
- * `menu_mes` usa `anio` + `mes` como columnas INTEGER separadas (no
- * un solo campo de fecha/texto) y el timestamp de publicación real se
- * llama `publicado_en`, no `publicado_at` — esquema confirmado
- * 2026-08-13 vía information_schema tras un error 42703 en producción.
- */
 export async function publicarMenu(anio: number, mes: number): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
@@ -59,18 +40,6 @@ export async function publicarMenu(anio: number, mes: number): Promise<AccionAdm
   return { ok: true };
 }
 
-/**
- * Asigna/cambia el platillo fijo de un día de la semana para un mes.
- * `menu_mes` tiene UNIQUE(anio, mes, dia_semana) (confirmado por el
- * error 23505 que disparó ese descubrimiento de esquema), así que un
- * upsert sobre esas tres columnas es exactamente "crea si no existe,
- * si existe solo cambia el platillo". No se toca `publicado` en el
- * upsert a propósito: si el mes ya está publicado y el staff edita un
- * día, no queremos des-publicarlo por accidente; para una fila nueva
- * se asume que `publicado` tiene DEFAULT false en la base (si no lo
- * tiene, esto fallará con un error de columna NOT NULL — en ese caso
- * hay que agregar el default en la base, no adivinar aquí otra vez).
- */
 export async function actualizarMenuDia(
   anio: number,
   mes: number,
@@ -93,7 +62,6 @@ export async function actualizarMenuDia(
   return { ok: true };
 }
 
-/** Agrega un platillo a la lista de comodines válidos de un anio/mes. */
 export async function agregarComodinMes(anio: number, mes: number, platilloId: string): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
@@ -116,7 +84,6 @@ export async function agregarComodinMes(anio: number, mes: number, platilloId: s
   return { ok: true };
 }
 
-/** Quita un platillo de la lista de comodines de un anio/mes. */
 export async function quitarComodinMes(anio: number, mes: number, platilloId: string): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
@@ -135,14 +102,6 @@ export async function quitarComodinMes(anio: number, mes: number, platilloId: st
   return { ok: true };
 }
 
-/**
- * Registra un gasto. Esquema real confirmado 2026-08-13 vía
- * information_schema: `gastos` no tiene columna de "gasto diferido"
- * ni de "notas" (aunque el mock de Figma sí las mostraba) — se omiten
- * esos dos campos del formulario en vez de fingir que se guardan.
- * `mes_contable`/`anio_contable` se derivan de `fecha` al crear (no
- * hay control aparte en el modal original para desacoplarlos).
- */
 export async function registrarGasto(formData: FormData): Promise<AccionAdminResult> {
   const { staff } = await requireStaff();
   const admin = createAdminClient();
@@ -179,7 +138,6 @@ export async function registrarGasto(formData: FormData): Promise<AccionAdminRes
   return { ok: true };
 }
 
-/** Elimina un gasto (p.ej. si se capturó por error). */
 export async function eliminarGasto(gastoId: string): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
@@ -189,7 +147,6 @@ export async function eliminarGasto(gastoId: string): Promise<AccionAdminResult>
   return { ok: true };
 }
 
-/** Cierra el mes contable (bloquea edición retroactiva — solo el estado, no hay lógica de reversión de gastos/pedidos todavía). */
 export async function cerrarMesContable(anio: number, mes: number): Promise<AccionAdminResult> {
   const { staff } = await requireStaff();
   const admin = createAdminClient();
@@ -218,12 +175,6 @@ export async function reabrirMesContable(anio: number, mes: number): Promise<Acc
   return { ok: true };
 }
 
-/**
- * Crea un cupón. `tipo` y `aplica_a` son columnas `text` libres en la
- * base (no enums) — el formulario asume "porcentaje"/"monto_fijo"
- * para `tipo` por ser la convención más común; si tu base ya usa
- * otros valores, es cuestión de ajustar las opciones del select.
- */
 export async function crearCupon(formData: FormData): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
@@ -266,7 +217,6 @@ export async function crearCupon(formData: FormData): Promise<AccionAdminResult>
   return { ok: true };
 }
 
-/** Activa/desactiva un cupón existente. */
 export async function alternarCupon(cuponId: string, activo: boolean): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
@@ -276,28 +226,50 @@ export async function alternarCupon(cuponId: string, activo: boolean): Promise<A
   return { ok: true };
 }
 
-/**
- * Crea un platillo nuevo en el catálogo. Esquema real de `platillos`
- * confirmado 2026-08-13 vía information_schema: `foto_url` (no
- * `imagen_url`), `calorias` (no `kcal`), `carbs_g` (no
- * `carbohidratos_g`) — no existen columnas `categoria`, `etiqueta` ni
- * `disponible_comodin` (se habían asumido sin verificar y nunca
- * existieron, lo que rompía por completo cualquier `.select()` anidado
- * que las pidiera).
- */
+const EXTENSIONES_FOTO: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+};
+
+async function subirFotoPlatillo(
+  admin: ReturnType<typeof createAdminClient>,
+  foto: File,
+): Promise<{ url: string | null; error: string | null }> {
+  const ext = EXTENSIONES_FOTO[foto.type];
+  if (!ext) return { url: null, error: "La foto debe ser PNG o JPEG." };
+  if (foto.size > 5 * 1024 * 1024) return { url: null, error: "La foto no debe pesar más de 5MB." };
+
+  const nombreArchivo = `${crypto.randomUUID()}.${ext}`;
+  const { error: subidaError } = await admin.storage.from("platillos").upload(nombreArchivo, foto, {
+    contentType: foto.type,
+    upsert: false,
+  });
+  if (subidaError) return { url: null, error: "No se pudo subir la foto." };
+
+  const { data } = admin.storage.from("platillos").getPublicUrl(nombreArchivo);
+  return { url: data.publicUrl, error: null };
+}
+
 export async function crearPlatillo(formData: FormData): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
 
   const nombre = String(formData.get("nombre") ?? "").trim();
   const descripcion = String(formData.get("descripcion") ?? "").trim() || null;
-  const fotoUrl = String(formData.get("foto_url") ?? "").trim() || null;
   const caloriasStr = String(formData.get("calorias") ?? "");
   const proteinaStr = String(formData.get("proteina_g") ?? "");
   const carbsStr = String(formData.get("carbs_g") ?? "");
   const grasaStr = String(formData.get("grasa_g") ?? "");
 
   if (!nombre) return { ok: false, error: "El nombre es obligatorio." };
+
+  let fotoUrl: string | null = null;
+  const fotoFile = formData.get("foto");
+  if (fotoFile instanceof File && fotoFile.size > 0) {
+    const subida = await subirFotoPlatillo(admin, fotoFile);
+    if (subida.error) return { ok: false, error: subida.error };
+    fotoUrl = subida.url;
+  }
 
   const aEntero = (s: string) => (s.trim() === "" ? null : Number.isFinite(Number(s)) ? Math.round(Number(s)) : null);
 
@@ -319,17 +291,12 @@ export async function crearPlatillo(formData: FormData): Promise<AccionAdminResu
   return { ok: true };
 }
 
-/**
- * Actualiza los datos de un platillo existente (pantalla "Editar" en
- * `/admin/platillos/[id]/editar`). Mismo esquema real que `crearPlatillo`.
- */
 export async function actualizarPlatillo(platilloId: string, formData: FormData): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
 
   const nombre = String(formData.get("nombre") ?? "").trim();
   const descripcion = String(formData.get("descripcion") ?? "").trim() || null;
-  const fotoUrl = String(formData.get("foto_url") ?? "").trim() || null;
   const caloriasStr = String(formData.get("calorias") ?? "");
   const proteinaStr = String(formData.get("proteina_g") ?? "");
   const carbsStr = String(formData.get("carbs_g") ?? "");
@@ -337,6 +304,14 @@ export async function actualizarPlatillo(platilloId: string, formData: FormData)
   const activo = formData.get("activo") === "on";
 
   if (!nombre) return { ok: false, error: "El nombre es obligatorio." };
+
+  let fotoUrl = String(formData.get("foto_url_actual") ?? "").trim() || null;
+  const fotoFile = formData.get("foto");
+  if (fotoFile instanceof File && fotoFile.size > 0) {
+    const subida = await subirFotoPlatillo(admin, fotoFile);
+    if (subida.error) return { ok: false, error: subida.error };
+    fotoUrl = subida.url;
+  }
 
   const aEntero = (s: string) => (s.trim() === "" ? null : Number.isFinite(Number(s)) ? Math.round(Number(s)) : null);
 
@@ -361,7 +336,6 @@ export async function actualizarPlatillo(platilloId: string, formData: FormData)
   return { ok: true };
 }
 
-/** Activa/desactiva un platillo (no lo borra — puede estar referenciado en pedidos pasados). */
 export async function alternarPlatilloActivo(platilloId: string, activo: boolean): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
@@ -372,12 +346,6 @@ export async function alternarPlatilloActivo(platilloId: string, activo: boolean
   return { ok: true };
 }
 
-/**
- * Copia el menú fijo y los comodines del mes anterior al mes actual
- * (atajo "Copiar del mes pasado" en el Figma). No copia `publicado`
- * — el mes copiado siempre empieza sin publicar, aunque el mes de
- * origen ya lo estuviera.
- */
 export async function copiarMenuMesPasado(anio: number, mes: number): Promise<AccionAdminResult> {
   await requireStaff();
   const admin = createAdminClient();
