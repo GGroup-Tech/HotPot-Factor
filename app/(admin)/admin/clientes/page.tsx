@@ -1,5 +1,6 @@
 import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ClienteActivoBoton } from "./ClienteActivoBoton";
 
 const currency = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 });
 const fechaCorta = new Intl.DateTimeFormat("es-MX", { weekday: "short", day: "numeric", month: "short" });
@@ -90,7 +91,11 @@ export default async function AdminClientesPage({
   const recompraPct = conAlMenosUnaCompra > 0 ? Math.round((conMasDeUnaCompra / conAlMenosUnaCompra) * 100) : 0;
   const platillosEntregadosMes = (pedidos ?? []).filter((p) => p.estado === "entregado").length;
 
-  let filas = clientesActivos.map((u) => {
+  // La tabla usa TODOS los clientes (no solo `clientesActivos`) para
+  // que al marcar a alguien como inactivo no desaparezca de la lista
+  // sin forma de reactivarlo — los KPIs de arriba sí siguen usando
+  // solo `clientesActivos` a propósito, son métricas de la base activa.
+  let filas = (usuarios ?? []).map((u) => {
     const saldo = saldoPorUsuario.get(u.id) ?? 0;
     const comprasUsuario = comprasPorUsuario.get(u.id) ?? [];
     const paqueteReciente = comprasUsuario[0]?.paquete ?? "—";
@@ -125,7 +130,7 @@ export default async function AdminClientesPage({
       </p>
 
       <div className="flex items-start gap-1">
-        <a
+        
           href={qs({ vista: "lista" })}
           className={`rounded-control px-[18px] py-[10px] text-[14px] font-medium ${
             vista === "lista" ? "border border-gold bg-raised text-gold" : "text-muted hover:text-cream"
@@ -133,7 +138,7 @@ export default async function AdminClientesPage({
         >
           Lista
         </a>
-        <a
+        
           href={qs({ vista: "estadisticas" })}
           className={`rounded-control px-[18px] py-[10px] text-[14px] font-medium ${
             vista === "estadisticas" ? "border border-gold bg-raised text-gold" : "text-muted hover:text-cream"
@@ -193,13 +198,14 @@ export default async function AdminClientesPage({
                   <th className="px-5 py-3.5 font-medium">Paquete</th>
                   <th className="px-5 py-3.5 font-medium">Créditos</th>
                   <th className="px-5 py-3.5 font-medium">Próx. entrega</th>
-                  <th className="px-5 py-3.5 font-medium">Estado</th>
+                  <th className="px-5 py-3.5 font-medium">Estado créditos</th>
+                  <th className="px-5 py-3.5 font-medium">Cuenta</th>
                 </tr>
               </thead>
               <tbody>
                 {filas.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-[14px] text-muted">
+                    <td colSpan={7} className="px-5 py-10 text-center text-[14px] text-muted">
                       No hay clientes que coincidan.
                     </td>
                   </tr>
@@ -215,8 +221,11 @@ export default async function AdminClientesPage({
                       </td>
                       <td className="px-5 py-3.5">
                         <span className={`pill border ${f.saldo > 0 ? "border-success text-success" : "border-warning text-warning"}`}>
-                          {f.saldo > 0 ? "Activo" : "Sin créditos"}
+                          {f.saldo > 0 ? "Con saldo" : "Sin créditos"}
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <ClienteActivoBoton usuarioId={f.id} activo={f.activo} />
                       </td>
                     </tr>
                   ))
