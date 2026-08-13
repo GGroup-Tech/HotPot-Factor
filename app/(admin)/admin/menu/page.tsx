@@ -20,6 +20,17 @@ type PlatilloMenuInfo = {
 
 type MenuDiaInfo = { platilloId: string; platillo: PlatilloMenuInfo | null };
 
+/**
+ * A3 — Admin · Menú del mes. Figma node 250:2. Edición real del menú
+ * fijo por día de la semana y los comodines del mes — no un mockup:
+ * cada cambio escribe directo a `menu_mes`/`comodines_mes`.
+ *
+ * Los controles (Guardar/Agregar/Quitar/Copiar/Publicar) viven en
+ * `MenuClientForms.tsx` como componentes cliente con `useTransition` —
+ * antes eran `<form action={...}>` de servidor inline, que el usuario
+ * reportó como "no hacen nada" al hacer click (2026-08-13): sin manejo
+ * de error del lado del cliente, cualquier falla quedaba invisible.
+ */
 export default async function AdminMenuPage({
   searchParams,
 }: {
