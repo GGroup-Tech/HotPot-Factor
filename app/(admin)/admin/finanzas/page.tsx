@@ -310,7 +310,7 @@ export default async function AdminFinanzasPage({
 
       <div className="flex flex-wrap items-center gap-1 overflow-x-auto">
         {TABS.map((t) => (
-          
+          <a
             key={t.id}
             href={qs({ vista: t.id })}
             className={`shrink-0 rounded-control px-3.5 py-2 text-[13px] font-medium ${
