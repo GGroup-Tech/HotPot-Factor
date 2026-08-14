@@ -36,6 +36,9 @@ function traducirErrorAuth(mensaje: string): string {
  * compartida con `/api/cobertura`), NO se crea la cuenta: se registra
  * en `lista_espera` y se corta el flujo ahí, como pide el punto 6 del
  * brief.
+ *
+ * `como_nos_conocio` agregado 2026-08-14 para medir ROI de marketing
+ * por canal — opcional, no bloquea el registro si viene vacío.
  */
 export async function crearCuenta(
   _prev: CrearCuentaState,
@@ -53,6 +56,7 @@ export async function crearCuenta(
   const codigoPostal = String(formData.get("codigo_postal") ?? "");
   const referencias = String(formData.get("referencias") ?? "");
   const paqueteId = String(formData.get("paquete_id") ?? "");
+  const comoNosConocio = String(formData.get("como_nos_conocio") ?? "").trim() || null;
 
   if (!nombre || !email || !password || !colonia) {
     return { ok: false, error: "Completa los campos obligatorios." };
@@ -85,7 +89,7 @@ export async function crearCuenta(
   // falla (la cuenta ya existe), pero sí queda en los logs de Vercel.
   const { data: perfilActualizado, error: perfilError } = await supabase
     .from("usuarios")
-    .update({ nombre: `${nombre} ${apellido}`.trim(), telefono, colonia, direccion })
+    .update({ nombre: `${nombre} ${apellido}`.trim(), telefono, colonia, direccion, como_nos_conocio: comoNosConocio })
     .eq("id", signUpData.user.id)
     .select("id")
     .maybeSingle();
