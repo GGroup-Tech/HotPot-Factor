@@ -294,7 +294,7 @@ export default async function AdminFinanzasPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-control border border-line bg-surface p-1">
           {PERIODOS.map((p) => (
-            
+            <a
               key={p.id}
               href={qs({ periodo: p.id })}
               className={`rounded-control px-3.5 py-2 text-[13px] font-medium ${
