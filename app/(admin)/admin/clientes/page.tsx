@@ -29,7 +29,7 @@ export default async function AdminClientesPage({
 }) {
   await requireStaff();
   const admin = createAdminClient();
-  const { q, filtro = "todos", vista = "lista" } = await searchParams;
+  const { q, filtro = "todos", vista = "" } = await searchParams;
 
   const hoy = new Date();
   const hoyISO = toISODate(hoy);
@@ -130,7 +130,7 @@ export default async function AdminClientesPage({
       </p>
 
       <div className="flex items-start gap-1">
-        
+        <a
           href={qs({ vista: "lista" })}
           className={`rounded-control px-[18px] py-[10px] text-[14px] font-medium ${
             vista === "lista" ? "border border-gold bg-raised text-gold" : "text-muted hover:text-cream"
