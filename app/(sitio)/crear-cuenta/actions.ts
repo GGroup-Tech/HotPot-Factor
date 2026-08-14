@@ -36,9 +36,6 @@ function traducirErrorAuth(mensaje: string): string {
  * compartida con `/api/cobertura`), NO se crea la cuenta: se registra
  * en `lista_espera` y se corta el flujo ahí, como pide el punto 6 del
  * brief.
- *
- * `como_nos_conocio` agregado 2026-08-14 para medir ROI de marketing
- * por canal — opcional, no bloquea el registro si viene vacío.
  */
 export async function crearCuenta(
   _prev: CrearCuentaState,
