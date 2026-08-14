@@ -45,6 +45,8 @@ export interface Database {
           // (ver `alternarClienteActivo` en actions.ts) y se limpia si
           // se reactiva.
           desactivado_en: string | null;
+          // Agregada 2026-08-14 para medir ROI de marketing por canal.
+          como_nos_conocio: string | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["usuarios"]["Row"]> & {
