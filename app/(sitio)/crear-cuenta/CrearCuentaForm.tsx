@@ -54,15 +54,14 @@ export function CrearCuentaForm({ paqueteId }: { paqueteId: string }) {
         <Field label="Teléfono" name="telefono" placeholder="81 1234 5678" />
         <Field label="Contraseña" name="password" type="password" placeholder="••••••••" required minLength={8} />
       </div>
-
-      <SelectField label="¿Cómo te enteraste de nosotros? (opcional)" name="como_nos_conocio" defaultValue="">
-        <option value="">Selecciona una opción</option>
-        <option value="instagram">Instagram</option>
-        <option value="facebook">Facebook</option>
-        <option value="tiktok">TikTok</option>
-        <option value="google">Google / búsqueda</option>
-        <option value="recomendacion">Recomendación de un amigo</option>
-        <option value="otro">Otro</option>
+      <SelectField label="¿Cómo te enteraste de nosotros?" name="como_nos_conocio" defaultValue="">
+        <option value="">Prefiero no decir</option>
+        <option value="Instagram">Instagram</option>
+        <option value="Facebook">Facebook</option>
+        <option value="TikTok">TikTok</option>
+        <option value="Google">Google / búsqueda</option>
+        <option value="Recomendación">Recomendación de un amigo</option>
+        <option value="Otro">Otro</option>
       </SelectField>
 
       <div className="h-px w-full bg-line" />
