@@ -138,7 +138,7 @@ export default async function AdminClientesPage({
         >
           Lista
         </a>
-        
+        <a
           href={qs({ vista: "estadisticas" })}
           className={`rounded-control px-[18px] py-[10px] text-[14px] font-medium ${
             vista === "estadisticas" ? "border border-gold bg-raised text-gold" : "text-muted hover:text-cream"
