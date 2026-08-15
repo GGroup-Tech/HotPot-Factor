@@ -1,5 +1,4 @@
 "use server";
-
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireUsuario } from "@/lib/supabase/staff";
@@ -92,12 +91,10 @@ export async function asignarPedido(
 ): Promise<AccionPedidoResult> {
   const { user } = await requireUsuario();
   const supabase = await createClient();
-
   const fecha = new Date(`${fechaEntrega}T00:00:00`);
   if (!puedeEditarPedido(fecha)) {
     return { ok: false, error: "Esta fecha ya está dentro de las 48 horas de corte." };
   }
-
   const { data: saldoRow } = await supabase
     .from("saldo_creditos")
     .select("saldo")
@@ -106,7 +103,6 @@ export async function asignarPedido(
   if (!saldoRow || saldoRow.saldo < 1) {
     return { ok: false, error: "No tienes créditos disponibles." };
   }
-
   const { anio, mes } = anioMesDeFecha(fecha);
   if (esComodin) {
     const valido = await esComodinValido(supabase, platilloId, anio, mes);
@@ -118,7 +114,6 @@ export async function asignarPedido(
       return { ok: false, error: "Ya usaste tus 2 comodines de este mes." };
     }
   }
-
   const { data: pedido, error: pedidoError } = await supabase
     .from("pedidos")
     .insert({
@@ -130,22 +125,42 @@ export async function asignarPedido(
     })
     .select("id")
     .single();
-
   if (pedidoError || !pedido) {
+    // Agregado 2026-08-14: antes esto fallaba en silencio — nunca
+    // quedaba registro del error real de Postgres/RLS en ningún lado,
+    // así que "No se pudo asignar la entrega" era un callejón sin
+    // salida para diagnosticar. Ahora sí queda en los logs de Vercel
+    // (Deployments → el deploy activo → Runtime Logs).
+    console.error("asignarPedido: INSERT a `pedidos` falló", {
+      usuarioId: user.id,
+      fechaEntrega,
+      platilloId,
+      esComodin,
+      code: (pedidoError as { code?: string } | null)?.code,
+      message: pedidoError?.message,
+      details: (pedidoError as { details?: string } | null)?.details,
+      hint: (pedidoError as { hint?: string } | null)?.hint,
+    });
     if ((pedidoError as { code?: string } | null)?.code === "23505") {
       return { ok: false, error: "Ya tienes una entrega asignada ese día." };
     }
     return { ok: false, error: "No se pudo asignar la entrega." };
   }
-
   const { error: movError } = await supabase.from("credito_movimientos").insert({
     usuario_id: user.id,
     cantidad: -1,
     tipo: "consumo",
     pedido_id: pedido.id,
   });
-  if (movError) return { ok: false, error: "No se pudo descontar el crédito." };
-
+  if (movError) {
+    console.error("asignarPedido: INSERT a `credito_movimientos` falló", {
+      usuarioId: user.id,
+      pedidoId: pedido.id,
+      code: (movError as { code?: string } | null)?.code,
+      message: movError.message,
+    });
+    return { ok: false, error: "No se pudo descontar el crédito." };
+  }
   revalidarCalendario();
   return { ok: true };
 }
@@ -161,13 +176,11 @@ export async function asignarPedido(
 export async function cancelarPedido(pedidoId: string): Promise<AccionPedidoResult> {
   const { user } = await requireUsuario();
   const supabase = await createClient();
-
   const { data: pedido } = await supabase
     .from("pedidos")
     .select("id, usuario_id, fecha_entrega, es_comodin, estado")
     .eq("id", pedidoId)
     .single();
-
   if (!pedido || pedido.usuario_id !== user.id) {
     return { ok: false, error: "Entrega no encontrada." };
   }
@@ -177,7 +190,6 @@ export async function cancelarPedido(pedidoId: string): Promise<AccionPedidoResu
   if (pedido.estado === "cancelado") {
     return { ok: true };
   }
-
   // `.select().maybeSingle()` en vez de un `.update()` a secas: si RLS
   // bloquea el UPDATE (falta policy `for update` en `pedidos`),
   // PostgREST no regresa error — regresa éxito con 0 filas afectadas.
@@ -190,21 +202,22 @@ export async function cancelarPedido(pedidoId: string): Promise<AccionPedidoResu
     .eq("id", pedidoId)
     .select("id")
     .maybeSingle();
-  if (updateError) return { ok: false, error: "No se pudo cancelar." };
+  if (updateError) {
+    console.error("cancelarPedido: UPDATE falló", { pedidoId, message: updateError.message });
+    return { ok: false, error: "No se pudo cancelar." };
+  }
   if (!canceladoRow) {
     return {
       ok: false,
       error: "No se pudo cancelar: falta una política de acceso en la base de datos. Contacta soporte técnico.",
     };
   }
-
   await supabase.from("credito_movimientos").insert({
     usuario_id: user.id,
     cantidad: 1,
     tipo: "cancelacion",
     pedido_id: pedidoId,
   });
-
   revalidarCalendario();
   return { ok: true };
 }
@@ -223,22 +236,18 @@ export async function editarPedido(
 ): Promise<AccionPedidoResult> {
   const { user } = await requireUsuario();
   const supabase = await createClient();
-
   const { data: pedido } = await supabase
     .from("pedidos")
     .select("id, usuario_id, fecha_entrega, es_comodin")
     .eq("id", pedidoId)
     .single();
-
   if (!pedido || pedido.usuario_id !== user.id) {
     return { ok: false, error: "Entrega no encontrada." };
   }
   if (!puedeEditarPedido(new Date(`${pedido.fecha_entrega}T00:00:00`))) {
     return { ok: false, error: "Esta entrega ya está dentro de las 48 horas de corte." };
   }
-
   const { anio, mes } = anioMesDeFecha(new Date(`${pedido.fecha_entrega}T00:00:00`));
-
   if (esComodin && !pedido.es_comodin) {
     const valido = await esComodinValido(supabase, nuevoPlatilloId, anio, mes);
     if (!valido) {
@@ -249,22 +258,22 @@ export async function editarPedido(
       return { ok: false, error: "Ya usaste tus 2 comodines de este mes." };
     }
   }
-
   const { data: editadoRow, error } = await supabase
     .from("pedidos")
     .update({ platillo_id: nuevoPlatilloId, es_comodin: esComodin })
     .eq("id", pedidoId)
     .select("id")
     .maybeSingle();
-
-  if (error) return { ok: false, error: "No se pudo actualizar la entrega." };
+  if (error) {
+    console.error("editarPedido: UPDATE falló", { pedidoId, message: error.message });
+    return { ok: false, error: "No se pudo actualizar la entrega." };
+  }
   if (!editadoRow) {
     return {
       ok: false,
       error: "No se pudo actualizar: falta una política de acceso en la base de datos. Contacta soporte técnico.",
     };
   }
-
   revalidarCalendario();
   return { ok: true };
 }
