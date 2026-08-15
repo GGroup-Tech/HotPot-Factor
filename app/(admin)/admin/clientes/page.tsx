@@ -29,7 +29,7 @@ export default async function AdminClientesPage({
 }) {
   await requireStaff();
   const admin = createAdminClient();
-  const { q, filtro = "todos", vista = "" } = await searchParams;
+  const { q, filtro = "todos", vista = "lista" } = await searchParams;
 
   const hoy = new Date();
   const hoyISO = toISODate(hoy);
