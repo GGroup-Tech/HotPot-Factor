@@ -29,36 +29,34 @@ export async function actualizarPerfil(
   }
 
   const nombre = String(formData.get("nombre") ?? "").trim();
+  const apellido = String(formData.get("apellido") ?? "").trim();
   const telefono = String(formData.get("telefono") ?? "").trim();
   const colonia = String(formData.get("colonia") ?? "").trim();
-  const direccion = String(formData.get("direccion") ?? "").trim();
+  const calleNumero = String(formData.get("calle_numero") ?? "").trim();
+  const codigoPostal = String(formData.get("codigo_postal") ?? "").trim();
 
-  if (!nombre) {
-    return { error: "El nombre es obligatorio." };
+  if (!nombre || !apellido) {
+    return { error: "El nombre y apellido son obligatorios." };
   }
 
-  // `.select().maybeSingle()` en vez de un `.update()` a secas: si RLS
-  // bloquea el UPDATE (falta una policy `for update`), Postgres/PostgREST
-  // no regresa error — regresa éxito con 0 filas afectadas. Sin este
-  // chequeo el form dice "Guardado." aunque nada haya cambiado, que es
-  // exactamente el bug reportado (los datos no se guardan y no hay
-  // ningún mensaje de error que lo delate).
+  // Corregido 2026-08-17: `usuarios` no tiene `direccion` — son
+  // `calle_numero` y `codigo_postal` por separado — y `apellido` es
+  // su propia columna NOT NULL, no parte de `nombre`.
   const { data: actualizado, error } = await supabase
     .from("usuarios")
     .update({
       nombre,
+      apellido,
       telefono: telefono || null,
       colonia: colonia || null,
-      direccion: direccion || null,
+      calle_numero: calleNumero || null,
+      codigo_postal: codigoPostal || null,
     })
     .eq("id", user.id)
     .select("id")
     .maybeSingle();
 
   if (error) {
-    // Agregado 2026-08-17: antes este error se tragaba en silencio —
-    // el usuario veía "No se pudo guardar tu perfil." sin que quedara
-    // ningún rastro real del error de Postgres/RLS en ningún lado.
     console.error("actualizarPerfil: UPDATE a `usuarios` falló", {
       usuarioId: user.id,
       code: (error as { code?: string } | null)?.code,
@@ -70,10 +68,6 @@ export async function actualizarPerfil(
   }
 
   if (!actualizado) {
-    // Ver nota arriba: esto es RLS bloqueando el UPDATE, no un error de
-    // red. Falta la policy `usuarios pueden actualizar su propio perfil`
-    // en la tabla `usuarios` (for update using (auth.uid() = id) with
-    // check (auth.uid() = id)) — agregarla en el SQL Editor de Supabase.
     return {
       error:
         "No se pudo guardar: tu cuenta no tiene permiso para actualizar este perfil (falta una política de acceso en la base de datos). Contacta soporte técnico.",
@@ -81,5 +75,6 @@ export async function actualizarPerfil(
   }
 
   revalidatePath("/cuenta/perfil");
+  revalidatePath("/cuenta");
   return { ok: true };
 }
