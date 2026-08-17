@@ -137,7 +137,7 @@ export default async function AdminFinanzasPage({
     admin.from("compras").select("monto_mxn"),
     admin.from("gastos").select("monto_mxn"),
     admin.from("pedidos").select("platillo_id, platillos(costo_mxn)").eq("estado", "entregado"),
-    admin.from("usuarios").select("id, created_at, activo, desactivado_en"),
+    admin.from("usuarios").select("id, creado_en, activo, desactivado_en, como_nos_conocio"),
     admin.from("compras").select("usuario_id, monto_mxn, paquetes(creditos)"),
     admin.from("platillos").select("costo_mxn").eq("activo", true),
   ]);
@@ -170,6 +170,28 @@ export default async function AdminFinanzasPage({
   const categoriasOrdenadas = [...porCategoria.entries()].sort((a, b) => b[1] - a[1]);
 
   const gastoMarketing = listaGastos.filter((g) => (g.categorias_gasto?.nombre ?? "").toLowerCase().includes("marketing")).reduce((a, g) => a + g.monto_mxn, 0);
+
+  // ---------- CAC y clientes nuevos por canal ----------
+  // Agregado 2026-08-14 a partir de `usuarios.como_nos_conocio`
+  // (capturado en el registro). El CAC ahora sí es gasto entre
+  // clientes nuevos del período — antes solo mostraba el gasto total
+  // de marketing, que no es un CAC real. No se reparte el gasto por
+  // canal porque `gastos` no tiene esa granularidad — es gasto total
+  // de marketing entre TODOS los clientes nuevos, sin importar canal.
+  const nuevosClientesPeriodo = (usuariosTodos ?? []).filter(
+    (u) => u.creado_en && new Date(u.creado_en) >= inicioPeriodo && new Date(u.creado_en) <= finPeriodo,
+  ).length;
+  const cacReal = nuevosClientesPeriodo > 0 && gastoMarketing > 0 ? gastoMarketing / nuevosClientesPeriodo : null;
+
+  const porCanal = new Map<string, number>();
+  for (const u of usuariosTodos ?? []) {
+    if (!u.creado_en) continue;
+    const fecha = new Date(u.creado_en);
+    if (fecha < inicioPeriodo || fecha > finPeriodo) continue;
+    const canal = u.como_nos_conocio?.trim() || "Sin especificar";
+    porCanal.set(canal, (porCanal.get(canal) ?? 0) + 1);
+  }
+  const canalesOrdenados = [...porCanal.entries()].sort((a, b) => b[1] - a[1]);
 
   const saldoTotal = (saldos ?? []).reduce((acc, s) => acc + s.saldo, 0);
   const clientesConSaldo = (saldos ?? []).filter((s) => s.saldo > 0);
@@ -235,7 +257,7 @@ export default async function AdminFinanzasPage({
   const clientesConCompraTotal = comprasPorUsuarioPasivo.size;
   const ltv = clientesConCompraTotal > 0 ? Math.round(ingresosHistoricoTotal / clientesConCompraTotal) : 0;
 
-  const clientesBaseChurn = (usuariosTodos ?? []).filter((u) => new Date(u.created_at) < inicioPeriodo).length;
+  const clientesBaseChurn = (usuariosTodos ?? []).filter((u) => u.creado_en && new Date(u.creado_en) < inicioPeriodo).length;
   const clientesDesactivadosPeriodo = (usuariosTodos ?? []).filter(
     (u) => u.desactivado_en && new Date(u.desactivado_en) >= inicioPeriodo && new Date(u.desactivado_en) <= finPeriodo,
   ).length;
@@ -424,8 +446,14 @@ export default async function AdminFinanzasPage({
             <Kpi etiqueta="INGRESO POR PORCIÓN" valor={`$${currency.format(ingresoPorPorcion)}`} nota={`${entregadas} porciones entregadas`} />
             <Kpi
               etiqueta="CAC (marketing)"
-              valor={gastoMarketing > 0 ? `$${currency.format(gastoMarketing)} gastado` : "—"}
-              nota={gastoMarketing > 0 ? "gasto en categoría Marketing" : "sin gastos de categoría Marketing"}
+              valor={cacReal != null ? `$${currency.format(Math.round(cacReal))}` : "—"}
+              nota={
+                cacReal != null
+                  ? `$${currency.format(gastoMarketing)} entre ${nuevosClientesPeriodo} clientes nuevos`
+                  : gastoMarketing > 0
+                    ? `$${currency.format(gastoMarketing)} gastado, sin clientes nuevos en el período`
+                    : "sin gastos de categoría Marketing"
+              }
             />
             <Kpi etiqueta="LTV" valor={`$${currency.format(ltv)}`} nota={`ingreso histórico prom. / ${clientesConCompraTotal} clientes`} />
             <Kpi
@@ -445,11 +473,17 @@ export default async function AdminFinanzasPage({
             />
           </div>
           <ConfiguracionForm isrActual={isrTasaPct} capacidadActual={capacidadDiaria} />
+
+          <p className="text-[18px] font-medium text-cream">Clientes nuevos por canal (período)</p>
+          <CanalesGrid canales={canalesOrdenados} />
+
           <p className="text-[11px] leading-[16px] text-muted/70">
             Supuestos: LTV usa el ingreso histórico total entre clientes con al menos una compra (no proyecta retención futura). Churn
             compara clientes dados de baja en el período contra los que ya existían al inicio del período (necesitas marcar clientes
             como inactivos en Clientes para que este número se mueva). Punto de equilibrio asume que todos los gastos registrados son
-            fijos (no hay clasificación fijo/variable en `gastos`) y usa el margen de contribución promedio por crédito.
+            fijos (no hay clasificación fijo/variable en `gastos`) y usa el margen de contribución promedio por crédito. El CAC divide
+            el gasto total de categoría Marketing entre los clientes nuevos del período, sin distinguir por canal (no hay gasto
+            registrado por canal, solo el conteo de clientes sí se desglosa abajo).
           </p>
         </>
       )}
@@ -709,6 +743,22 @@ function CategoriasGrid({ categorias }: { categorias: [string, number][] }) {
         <div key={nombre} className="flex flex-col gap-1.5 rounded-card border border-line bg-surface px-5 py-4">
           <p className="text-[10px] font-medium tracking-[0.8px] text-gold">{nombre.toUpperCase()}</p>
           <p className="font-display text-[22px] font-semibold text-cream">${currency.format(monto)}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CanalesGrid({ canales }: { canales: [string, number][] }) {
+  if (canales.length === 0) return <p className="text-[13px] text-muted">Sin clientes nuevos en este período.</p>;
+  return (
+    <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {canales.map(([canal, cantidad]) => (
+        <div key={canal} className="flex flex-col gap-1.5 rounded-card border border-line bg-surface px-5 py-4">
+          <p className="text-[10px] font-medium tracking-[0.8px] text-gold">{canal.toUpperCase()}</p>
+          <p className="font-display text-[22px] font-semibold text-cream">
+            {cantidad} {cantidad === 1 ? "cliente" : "clientes"}
+          </p>
         </div>
       ))}
     </div>
