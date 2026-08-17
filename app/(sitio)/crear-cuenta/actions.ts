@@ -10,7 +10,6 @@ export interface CrearCuentaState {
   paqueteId?: string;
 }
 
-/** Traduce mensajes comunes de Supabase Auth — llegan en inglés por default. */
 function traducirErrorAuth(mensaje: string): string {
   if (/security purposes/i.test(mensaje) && /seconds/i.test(mensaje)) {
     const segundos = mensaje.match(/(\d+)\s*seconds?/i)?.[1];
@@ -27,16 +26,6 @@ function traducirErrorAuth(mensaje: string): string {
   return "No se pudo crear la cuenta. Intenta de nuevo.";
 }
 
-/**
- * Crea la cuenta del cliente. `on_auth_user_created` ya inserta la fila
- * base en `usuarios` — aquí solo completamos los campos de dirección
- * después del signUp.
- *
- * Si la colonia no hace match contra `zonas_cobertura` (`hayCobertura`,
- * compartida con `/api/cobertura`), NO se crea la cuenta: se registra
- * en `lista_espera` y se corta el flujo ahí, como pide el punto 6 del
- * brief.
- */
 export async function crearCuenta(
   _prev: CrearCuentaState,
   formData: FormData,
@@ -77,28 +66,29 @@ export async function crearCuenta(
     return { ok: false, error: signUpError ? traducirErrorAuth(signUpError.message) : "No se pudo crear la cuenta." };
   }
 
-  const direccion = `${calle}, ${colonia}, CP ${codigoPostal}`;
-  // `.select().maybeSingle()` para detectar si RLS bloquea el UPDATE
-  // (falta la policy `usuarios pueden actualizar su propio perfil`) —
-  // sin esto, un signUp exitoso puede quedar con teléfono/colonia/
-  // dirección vacíos para siempre y nadie se entera hasta que el
-  // cliente reporta "mis datos no están". No se corta el flujo si
-  // falla (la cuenta ya existe), pero sí queda en los logs de Vercel.
+  // Corregido 2026-08-17: `nombre`/`apellido` son columnas separadas
+  // (NOT NULL) y no existe `direccion` — son `calle_numero` y
+  // `codigo_postal`. Antes esto fallaba SIEMPRE en silencio, por eso
+  // "los datos del registro no se guardaban".
   const { data: perfilActualizado, error: perfilError } = await supabase
     .from("usuarios")
-    .update({ nombre: `${nombre} ${apellido}`.trim(), telefono, colonia, direccion, como_nos_conocio: comoNosConocio })
+    .update({
+      nombre,
+      apellido,
+      telefono: telefono || null,
+      colonia,
+      calle_numero: calle || null,
+      codigo_postal: codigoPostal || null,
+      referencias: referencias || null,
+      como_nos_conocio: comoNosConocio,
+    })
     .eq("id", signUpData.user.id)
     .select("id")
     .maybeSingle();
 
   if (perfilError || !perfilActualizado) {
-    console.error(
-      "crearCuenta: no se pudo guardar teléfono/colonia/dirección (revisar policy UPDATE en `usuarios`)",
-      perfilError,
-    );
+    console.error("crearCuenta: no se pudo guardar el resto del perfil", perfilError);
   }
-
-  void referencias; // guardado junto con la dirección hasta que exista una columna dedicada
 
   return { ok: true, paqueteId };
 }
