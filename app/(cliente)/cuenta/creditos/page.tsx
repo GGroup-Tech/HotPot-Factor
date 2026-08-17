@@ -18,15 +18,25 @@ export default async function CreditosPage() {
   const { user } = await requireUsuario();
   const supabase = await createClient();
 
-  const [{ data: saldoRow }, { data: movimientos }] = await Promise.all([
+  // Corregido 2026-08-17: las columnas reales son `notas` y
+  // `creado_en` (confirmado contra information_schema.columns), no
+  // `nota`/`created_at` — con los nombres viejos la consulta fallaba
+  // en silencio (el error nunca se revisaba) y `movimientos` quedaba
+  // `null`, mostrando "Todavía no tienes movimientos." aunque sí
+  // hubiera historial real.
+  const [{ data: saldoRow }, { data: movimientos, error: movimientosError }] = await Promise.all([
     supabase.from("saldo_creditos").select("saldo").eq("usuario_id", user.id).maybeSingle(),
     supabase
       .from("credito_movimientos")
-      .select("id, cantidad, tipo, nota, created_at")
+      .select("id, cantidad, tipo, notas, creado_en")
       .eq("usuario_id", user.id)
-      .order("created_at", { ascending: false })
+      .order("creado_en", { ascending: false })
       .limit(50),
   ]);
+
+  if (movimientosError) {
+    console.error("CreditosPage: no se pudo leer `credito_movimientos`", movimientosError.message);
+  }
 
   const saldo = saldoRow?.saldo ?? 0;
 
@@ -54,9 +64,9 @@ export default async function CreditosPage() {
             >
               <div className="flex flex-col gap-0.5">
                 <p className="text-[14px] text-cream">{TIPO_LABEL[m.tipo]}</p>
-                {m.nota && <p className="text-[12px] text-muted">{m.nota}</p>}
+                {m.notas && <p className="text-[12px] text-muted">{m.notas}</p>}
               </div>
-              <p className="text-[13px] text-muted">{fecha.format(new Date(m.created_at))}</p>
+              <p className="text-[13px] text-muted">{m.creado_en ? fecha.format(new Date(m.creado_en)) : "—"}</p>
               <p
                 className={`text-right text-[14px] font-medium num ${
                   m.cantidad > 0 ? "text-success" : "text-cream"
