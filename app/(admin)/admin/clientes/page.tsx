@@ -13,14 +13,14 @@ function toISODate(d: Date) {
 }
 
 /**
- * A1 — Admin · Clientes. Figma node 115:2 (incluye ya la vista
- * "Lista" con sus KPIs — la pestaña "Estadísticas", 304:7, muestra
- * los mismos KPIs sin la tabla, así que se reutiliza el mismo cálculo
- * en vez de duplicar consultas).
+ * A1 — Admin · Clientes.
  *
- * `createAdminClient()` — mismo motivo que Pedidos y A0: `requireStaff()`
- * ya verificó identidad, así que las lecturas no dependen de RLS para
- * staff (que nunca se configuró).
+ * `usuarios` no tiene columna `email` (vive solo en Supabase Auth) ni
+ * `created_at` (es `creado_en`) — esto rompía la consulta COMPLETA de
+ * clientes en silencio (PostgREST rechaza el `.select()` entero si
+ * pide una columna que no existe), y por eso "0 clientes activos"
+ * aunque sí hubiera clientes reales con `activo = true`. El correo se
+ * trae aparte con `admin.auth.admin.listUsers()`.
  */
 export default async function AdminClientesPage({
   searchParams,
@@ -43,8 +43,9 @@ export default async function AdminClientesPage({
     { data: compras },
     { data: pedidos },
     { data: paquetesActivos },
+    { data: authUsers },
   ] = await Promise.all([
-    admin.from("usuarios").select("id, nombre, email, telefono, colonia, activo, created_at"),
+    admin.from("usuarios").select("id, nombre, telefono, colonia, activo, creado_en"),
     admin.from("saldo_creditos").select("usuario_id, saldo"),
     admin
       .from("compras")
@@ -56,7 +57,10 @@ export default async function AdminClientesPage({
       .neq("estado", "cancelado")
       .gte("fecha_entrega", toISODate(primerDiaMes)),
     admin.from("paquetes").select("precio_mxn, creditos").eq("activo", true),
+    admin.auth.admin.listUsers({ perPage: 1000 }),
   ]);
+
+  const emailPorId = new Map((authUsers?.users ?? []).map((u) => [u.id, u.email ?? "—"]));
 
   const saldoPorUsuario = new Map((saldos ?? []).map((s) => [s.usuario_id, s.saldo]));
   const comprasPorUsuario = new Map<string, { monto_mxn: number; created_at: string; paquete: string | null }[]>();
@@ -73,8 +77,8 @@ export default async function AdminClientesPage({
   }
 
   const clientesActivos = (usuarios ?? []).filter((u) => u.activo);
-  const nuevosSemana = clientesActivos.filter((u) => toISODate(new Date(u.created_at)) >= toISODate(inicioSemana)).length;
-  const nuevosMes = clientesActivos.filter((u) => new Date(u.created_at) >= primerDiaMes).length;
+  const nuevosSemana = clientesActivos.filter((u) => u.creado_en && toISODate(new Date(u.creado_en)) >= toISODate(inicioSemana)).length;
+  const nuevosMes = clientesActivos.filter((u) => u.creado_en && new Date(u.creado_en) >= primerDiaMes).length;
   const totalCreditosDisponibles = (saldos ?? []).reduce((acc, s) => acc + s.saldo, 0);
   const creditosTotalesPaq = (paquetesActivos ?? []).reduce((acc, p) => acc + p.creditos, 0);
   const precioTotalPaq = (paquetesActivos ?? []).reduce((acc, p) => acc + p.precio_mxn, 0);
@@ -91,10 +95,6 @@ export default async function AdminClientesPage({
   const recompraPct = conAlMenosUnaCompra > 0 ? Math.round((conMasDeUnaCompra / conAlMenosUnaCompra) * 100) : 0;
   const platillosEntregadosMes = (pedidos ?? []).filter((p) => p.estado === "entregado").length;
 
-  // La tabla usa TODOS los clientes (no solo `clientesActivos`) para
-  // que al marcar a alguien como inactivo no desaparezca de la lista
-  // sin forma de reactivarlo — los KPIs de arriba sí siguen usando
-  // solo `clientesActivos` a propósito, son métricas de la base activa.
   let filas = (usuarios ?? []).map((u) => {
     const saldo = saldoPorUsuario.get(u.id) ?? 0;
     const comprasUsuario = comprasPorUsuario.get(u.id) ?? [];
@@ -102,7 +102,13 @@ export default async function AdminClientesPage({
     const proxEntrega = (pedidosPorUsuario.get(u.id) ?? [])
       .filter((p) => p.fecha_entrega >= hoyISO)
       .sort((a, b) => a.fecha_entrega.localeCompare(b.fecha_entrega))[0];
-    return { ...u, saldo, paqueteReciente, proxEntrega: proxEntrega?.fecha_entrega ?? null };
+    return {
+      ...u,
+      email: emailPorId.get(u.id) ?? "—",
+      saldo,
+      paqueteReciente,
+      proxEntrega: proxEntrega?.fecha_entrega ?? null,
+    };
   });
 
   if (filtro === "con_creditos") filas = filas.filter((f) => f.saldo > 0);
@@ -130,7 +136,7 @@ export default async function AdminClientesPage({
       </p>
 
       <div className="flex items-start gap-1">
-        <a
+        
           href={qs({ vista: "lista" })}
           className={`rounded-control px-[18px] py-[10px] text-[14px] font-medium ${
             vista === "lista" ? "border border-gold bg-raised text-gold" : "text-muted hover:text-cream"
@@ -138,7 +144,7 @@ export default async function AdminClientesPage({
         >
           Lista
         </a>
-        <a
+        
           href={qs({ vista: "estadisticas" })}
           className={`rounded-control px-[18px] py-[10px] text-[14px] font-medium ${
             vista === "estadisticas" ? "border border-gold bg-raised text-gold" : "text-muted hover:text-cream"
