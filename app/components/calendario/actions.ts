@@ -1,6 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUsuario } from "@/lib/supabase/staff";
 import { toISODate } from "@/lib/calendario";
 import { puedeEditarPedido, COMODINES_POR_MES, HORAS_CORTE_EDICION } from "@/lib/creditos";
@@ -114,6 +115,38 @@ export async function asignarPedido(
       return { ok: false, error: "Ya usaste tus 2 comodines de este mes." };
     }
   }
+
+  // Agregado 2026-08-17: `pedidos` tiene UNIQUE(usuario_id,
+  // fecha_entrega) sin excluir filas canceladas (nunca se borran, por
+  // diseño append-only), así que reintentar asignar un día que ya
+  // cancelaste antes chocaba con la fila vieja y regresaba "Ya tienes
+  // una entrega asignada ese día." — falso, porque esa entrega está
+  // cancelada. La policy de UPDATE bloquea tocar filas ya canceladas
+  // a propósito, así que no se puede "revivir" con el cliente normal;
+  // se borra con el cliente admin (ya se validó arriba que la fila es
+  // de este usuario) y se deja insertar limpio abajo.
+  const { data: existente } = await supabase
+    .from("pedidos")
+    .select("id, estado")
+    .eq("usuario_id", user.id)
+    .eq("fecha_entrega", fechaEntrega)
+    .maybeSingle();
+
+  if (existente && existente.estado !== "cancelado") {
+    return { ok: false, error: "Ya tienes una entrega asignada ese día." };
+  }
+  if (existente && existente.estado === "cancelado") {
+    const admin = createAdminClient();
+    const { error: deleteError } = await admin.from("pedidos").delete().eq("id", existente.id);
+    if (deleteError) {
+      console.error("asignarPedido: no se pudo limpiar el pedido cancelado previo", {
+        pedidoId: existente.id,
+        message: deleteError.message,
+      });
+      return { ok: false, error: "No se pudo asignar la entrega." };
+    }
+  }
+
   // `pedidos.corte_edicion` es NOT NULL y la policy
   // `usuario_edita_pedidos_en_plazo` (UPDATE) depende de esta columna
   // (`now() < corte_edicion`). Se calcula igual que `puedeEditarPedido`:
@@ -147,10 +180,8 @@ export async function asignarPedido(
     }
     return { ok: false, error: "No se pudo asignar la entrega." };
   }
-  // Corregido 2026-08-17: la columna real en `credito_movimientos` es
-  // `referencia_id`, no `pedido_id` (confirmado contra
-  // information_schema.columns) — por eso todo INSERT aquí fallaba con
-  // PGRST204 y ningún crédito se descontaba de verdad nunca.
+  // La columna real en `credito_movimientos` es `referencia_id`, no
+  // `pedido_id` (confirmado contra information_schema.columns).
   const { error: movError } = await supabase.from("credito_movimientos").insert({
     usuario_id: user.id,
     cantidad: -1,
@@ -195,10 +226,6 @@ export async function cancelarPedido(pedidoId: string): Promise<AccionPedidoResu
   if (pedido.estado === "cancelado") {
     return { ok: true };
   }
-  // `.select().maybeSingle()` en vez de un `.update()` a secas: si RLS
-  // bloquea el UPDATE, PostgREST no regresa error — regresa éxito con
-  // 0 filas afectadas. Sin este chequeo el usuario ve "cancelado" en
-  // el toast pero al recargar el calendario sigue exactamente igual.
   const { data: canceladoRow, error: updateError } = await supabase
     .from("pedidos")
     .update({ estado: "cancelado" })
