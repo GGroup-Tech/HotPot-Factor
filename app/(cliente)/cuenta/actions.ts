@@ -56,6 +56,16 @@ export async function actualizarPerfil(
     .maybeSingle();
 
   if (error) {
+    // Agregado 2026-08-17: antes este error se tragaba en silencio —
+    // el usuario veía "No se pudo guardar tu perfil." sin que quedara
+    // ningún rastro real del error de Postgres/RLS en ningún lado.
+    console.error("actualizarPerfil: UPDATE a `usuarios` falló", {
+      usuarioId: user.id,
+      code: (error as { code?: string } | null)?.code,
+      message: error.message,
+      details: (error as { details?: string } | null)?.details,
+      hint: (error as { hint?: string } | null)?.hint,
+    });
     return { error: "No se pudo guardar tu perfil. Intenta de nuevo." };
   }
 
