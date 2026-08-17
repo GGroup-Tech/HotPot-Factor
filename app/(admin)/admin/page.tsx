@@ -83,7 +83,7 @@ export default async function AdminPanelPage() {
       .from("usuarios")
       .select("id", { count: "exact", head: true })
       .eq("activo", true)
-      .gte("created_at", toISODate(inicioSemana)),
+      .gte("creado_en", toISODate(inicioSemana)),
     supabase
       .from("compras")
       .select("monto_mxn")
