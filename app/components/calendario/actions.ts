@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireUsuario } from "@/lib/supabase/staff";
 import { toISODate } from "@/lib/calendario";
-import { puedeEditarPedido, COMODINES_POR_MES } from "@/lib/creditos";
+import { puedeEditarPedido, COMODINES_POR_MES, HORAS_CORTE_EDICION } from "@/lib/creditos";
 
 export interface AccionPedidoResult {
   ok: boolean;
@@ -114,6 +114,14 @@ export async function asignarPedido(
       return { ok: false, error: "Ya usaste tus 2 comodines de este mes." };
     }
   }
+  // Agregado 2026-08-14: `pedidos.corte_edicion` es NOT NULL y la
+  // policy `usuario_edita_pedidos_en_plazo` (UPDATE) depende de esta
+  // columna (`now() < corte_edicion`) para permitir editar/cancelar.
+  // Antes no se mandaba en el INSERT → violación de constraint →
+  // "No se pudo asignar la entrega." en TODOS los intentos, sin
+  // excepción. Se calcula igual que `puedeEditarPedido`: 48h antes de
+  // la medianoche del día de entrega.
+  const corteEdicion = new Date(fecha.getTime() - HORAS_CORTE_EDICION * 60 * 60 * 1000);
   const { data: pedido, error: pedidoError } = await supabase
     .from("pedidos")
     .insert({
@@ -122,15 +130,11 @@ export async function asignarPedido(
       estado: "programado",
       platillo_id: platilloId,
       es_comodin: esComodin,
+      corte_edicion: corteEdicion.toISOString(),
     })
     .select("id")
     .single();
   if (pedidoError || !pedido) {
-    // Agregado 2026-08-14: antes esto fallaba en silencio — nunca
-    // quedaba registro del error real de Postgres/RLS en ningún lado,
-    // así que "No se pudo asignar la entrega" era un callejón sin
-    // salida para diagnosticar. Ahora sí queda en los logs de Vercel
-    // (Deployments → el deploy activo → Runtime Logs).
     console.error("asignarPedido: INSERT a `pedidos` falló", {
       usuarioId: user.id,
       fechaEntrega,
