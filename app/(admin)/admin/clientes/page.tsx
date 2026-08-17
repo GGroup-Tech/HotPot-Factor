@@ -136,7 +136,7 @@ export default async function AdminClientesPage({
       </p>
 
       <div className="flex items-start gap-1">
-        
+        <a
           href={qs({ vista: "lista" })}
           className={`rounded-control px-[18px] py-[10px] text-[14px] font-medium ${
             vista === "lista" ? "border border-gold bg-raised text-gold" : "text-muted hover:text-cream"
@@ -144,7 +144,7 @@ export default async function AdminClientesPage({
         >
           Lista
         </a>
-        
+        <a
           href={qs({ vista: "estadisticas" })}
           className={`rounded-control px-[18px] py-[10px] text-[14px] font-medium ${
             vista === "estadisticas" ? "border border-gold bg-raised text-gold" : "text-muted hover:text-cream"
