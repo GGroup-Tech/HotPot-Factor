@@ -114,13 +114,10 @@ export async function asignarPedido(
       return { ok: false, error: "Ya usaste tus 2 comodines de este mes." };
     }
   }
-  // Agregado 2026-08-14: `pedidos.corte_edicion` es NOT NULL y la
-  // policy `usuario_edita_pedidos_en_plazo` (UPDATE) depende de esta
-  // columna (`now() < corte_edicion`) para permitir editar/cancelar.
-  // Antes no se mandaba en el INSERT → violación de constraint →
-  // "No se pudo asignar la entrega." en TODOS los intentos, sin
-  // excepción. Se calcula igual que `puedeEditarPedido`: 48h antes de
-  // la medianoche del día de entrega.
+  // `pedidos.corte_edicion` es NOT NULL y la policy
+  // `usuario_edita_pedidos_en_plazo` (UPDATE) depende de esta columna
+  // (`now() < corte_edicion`). Se calcula igual que `puedeEditarPedido`:
+  // 48h antes de la medianoche del día de entrega.
   const corteEdicion = new Date(fecha.getTime() - HORAS_CORTE_EDICION * 60 * 60 * 1000);
   const { data: pedido, error: pedidoError } = await supabase
     .from("pedidos")
@@ -150,11 +147,15 @@ export async function asignarPedido(
     }
     return { ok: false, error: "No se pudo asignar la entrega." };
   }
+  // Corregido 2026-08-17: la columna real en `credito_movimientos` es
+  // `referencia_id`, no `pedido_id` (confirmado contra
+  // information_schema.columns) — por eso todo INSERT aquí fallaba con
+  // PGRST204 y ningún crédito se descontaba de verdad nunca.
   const { error: movError } = await supabase.from("credito_movimientos").insert({
     usuario_id: user.id,
     cantidad: -1,
     tipo: "consumo",
-    pedido_id: pedido.id,
+    referencia_id: pedido.id,
   });
   if (movError) {
     console.error("asignarPedido: INSERT a `credito_movimientos` falló", {
@@ -195,11 +196,9 @@ export async function cancelarPedido(pedidoId: string): Promise<AccionPedidoResu
     return { ok: true };
   }
   // `.select().maybeSingle()` en vez de un `.update()` a secas: si RLS
-  // bloquea el UPDATE (falta policy `for update` en `pedidos`),
-  // PostgREST no regresa error — regresa éxito con 0 filas afectadas.
-  // Sin este chequeo el usuario ve "cancelado" en el toast pero al
-  // recargar el calendario sigue exactamente igual, que es el bug que
-  // se reportó. Ver la misma nota en `usuarios` (cuenta/actions.ts).
+  // bloquea el UPDATE, PostgREST no regresa error — regresa éxito con
+  // 0 filas afectadas. Sin este chequeo el usuario ve "cancelado" en
+  // el toast pero al recargar el calendario sigue exactamente igual.
   const { data: canceladoRow, error: updateError } = await supabase
     .from("pedidos")
     .update({ estado: "cancelado" })
@@ -220,7 +219,7 @@ export async function cancelarPedido(pedidoId: string): Promise<AccionPedidoResu
     usuario_id: user.id,
     cantidad: 1,
     tipo: "cancelacion",
-    pedido_id: pedidoId,
+    referencia_id: pedidoId,
   });
   revalidarCalendario();
   return { ok: true };
