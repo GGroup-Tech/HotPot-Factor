@@ -32,26 +32,32 @@ export interface Database {
   public: {
     Tables: {
       usuarios: {
+        // Esquema real confirmado 2026-08-17 vía information_schema.columns.
+        // `nombre` y `apellido` son columnas separadas (NOT NULL), no
+        // existe `email` (vive solo en auth.users), no existe
+        // `direccion` (son `calle_numero` + `codigo_postal`), y el
+        // timestamp de creación es `creado_en`, no `created_at`.
         Row: {
           id: string; // = auth.users.id, set by on_auth_user_created trigger
           nombre: string;
-          email: string;
+          apellido: string;
           telefono: string | null;
+          fecha_nac: string | null;
+          calle_numero: string | null;
           colonia: string | null;
-          direccion: string | null;
-          activo: boolean;
-          // Agregada 2026-08-13 para poder calcular churn real en
-          // Finanzas — se llena cuando staff desactiva al cliente
-          // (ver `alternarClienteActivo` en actions.ts) y se limpia si
-          // se reactiva.
+          codigo_postal: string | null;
+          referencias: string | null;
+          zona_id: string | null;
+          activo: boolean | null;
+          creado_en: string | null;
+          actualizado_en: string | null;
           desactivado_en: string | null;
-          // Agregada 2026-08-14 para medir ROI de marketing por canal.
           como_nos_conocio: string | null;
-          created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["usuarios"]["Row"]> & {
           id: string;
-          email: string;
+          nombre: string;
+          apellido: string;
         };
         Update: Partial<Database["public"]["Tables"]["usuarios"]["Row"]>;
         Relationships: [];
