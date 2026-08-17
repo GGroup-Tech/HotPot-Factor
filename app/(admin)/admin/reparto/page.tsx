@@ -21,7 +21,14 @@ const ESTADO_INFO: Record<string, { label: string; color: string }> = {
 
 /**
  * AC — Admin · Reparto. Figma node 184:123. Lista de entregas del día
- * con dirección real (`usuarios.direccion`), agrupadas por zona.
+ * con dirección real, agrupadas por zona.
+ *
+ * Corregido 2026-08-17: `usuarios` no tiene columna `direccion` — son
+ * `calle_numero` y `codigo_postal` por separado (confirmado contra
+ * information_schema.columns). El `.select()` anidado pedía esa
+ * columna inexistente, así que PostgREST rechazaba la consulta
+ * COMPLETA en silencio y la pantalla siempre mostraba "sin entregas",
+ * sin importar cuántos pedidos reales hubiera ese día.
  */
 export default async function AdminRepartoPage({
   searchParams,
@@ -41,7 +48,7 @@ export default async function AdminRepartoPage({
 
   const { data: pedidosRaw } = await admin
     .from("pedidos")
-    .select("id, estado, direccion_entrega, platillos(nombre), usuarios(nombre, colonia, direccion)")
+    .select("id, estado, direccion_entrega, platillos(nombre), usuarios(nombre, colonia, calle_numero, codigo_postal)")
     .eq("fecha_entrega", fechaISO)
     .neq("estado", "cancelado")
     .order("id");
@@ -51,9 +58,15 @@ export default async function AdminRepartoPage({
     estado: string;
     direccion_entrega: string | null;
     platillos: { nombre: string } | null;
-    usuarios: { nombre: string; colonia: string | null; direccion: string | null } | null;
+    usuarios: { nombre: string; colonia: string | null; calle_numero: string | null; codigo_postal: string | null } | null;
   };
   const pedidos = (pedidosRaw ?? []) as unknown as Fila[];
+
+  function direccionCompleta(p: Fila): string | null {
+    if (p.direccion_entrega) return p.direccion_entrega;
+    const partes = [p.usuarios?.calle_numero, p.usuarios?.colonia, p.usuarios?.codigo_postal].filter(Boolean);
+    return partes.length > 0 ? partes.join(", ") : null;
+  }
 
   const porZona = new Map<string, number>();
   for (const p of pedidos) {
@@ -67,7 +80,7 @@ export default async function AdminRepartoPage({
     ...pedidos.map((p, i) => [
       String(i + 1).padStart(3, "0"),
       p.usuarios?.colonia ?? "",
-      p.direccion_entrega ?? p.usuarios?.direccion ?? "",
+      direccionCompleta(p) ?? "",
       p.usuarios?.nombre ?? "",
       p.platillos?.nombre ?? "",
       ESTADO_INFO[p.estado]?.label ?? p.estado,
@@ -139,7 +152,7 @@ export default async function AdminRepartoPage({
                   <tr key={p.id} className="border-b border-line text-[13px] text-cream last:border-b-0">
                     <td className="px-5 py-3.5 text-muted">{String(i + 1).padStart(3, "0")}</td>
                     <td className="px-5 py-3.5">{p.usuarios?.colonia ?? "—"}</td>
-                    <td className="px-5 py-3.5">{p.direccion_entrega ?? p.usuarios?.direccion ?? "—"}</td>
+                    <td className="px-5 py-3.5">{direccionCompleta(p) ?? "—"}</td>
                     <td className="px-5 py-3.5">{p.usuarios?.nombre ?? "—"}</td>
                     <td className="px-5 py-3.5">{p.platillos?.nombre ?? "—"}</td>
                     <td className="px-5 py-3.5">
