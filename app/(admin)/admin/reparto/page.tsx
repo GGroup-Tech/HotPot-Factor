@@ -46,12 +46,22 @@ export default async function AdminRepartoPage({
   const siguiente = new Date(fecha);
   siguiente.setDate(fecha.getDate() + 1);
 
-  const { data: pedidosRaw } = await admin
+  const { data: pedidosRaw, error: pedidosError } = await admin
     .from("pedidos")
     .select("id, estado, direccion_entrega, platillos(nombre), usuarios(nombre, colonia, calle_numero, codigo_postal)")
     .eq("fecha_entrega", fechaISO)
     .neq("estado", "cancelado")
     .order("id");
+
+  if (pedidosError) {
+    console.error("AdminRepartoPage: SELECT a `pedidos` falló", {
+      fechaISO,
+      code: pedidosError.code,
+      message: pedidosError.message,
+      details: pedidosError.details,
+      hint: pedidosError.hint,
+    });
+  }
 
   type Fila = {
     id: string;
@@ -110,8 +120,19 @@ export default async function AdminRepartoPage({
       </div>
 
       <p className="text-[13px] text-muted">
-        {fechaLarga.format(fecha)} · {pedidos.length} entregas
+        {fechaLarga.format(fecha)} ({fechaISO}) · {pedidos.length} entregas
       </p>
+
+      {pedidosError ? (
+        <div className="rounded-card border border-danger bg-danger/10 px-5 py-4 text-[13px] text-danger">
+          <p className="font-medium">Error al consultar entregas — mándale esto a soporte:</p>
+          <p className="mt-1 font-mono text-[12px]">
+            code: {pedidosError.code ?? "—"} · {pedidosError.message}
+            {pedidosError.details ? ` · details: ${pedidosError.details}` : ""}
+            {pedidosError.hint ? ` · hint: ${pedidosError.hint}` : ""}
+          </p>
+        </div>
+      ) : null}
 
       <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {zonasOrdenadas.length === 0 ? (
