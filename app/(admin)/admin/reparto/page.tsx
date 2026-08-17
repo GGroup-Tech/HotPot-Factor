@@ -48,7 +48,7 @@ export default async function AdminRepartoPage({
 
   const { data: pedidosRaw, error: pedidosError } = await admin
     .from("pedidos")
-    .select("id, estado, direccion_entrega, platillos(nombre), usuarios(nombre, colonia, calle_numero, codigo_postal)")
+    .select("id, estado, platillos(nombre), usuarios(nombre, colonia, calle_numero, codigo_postal)")
     .eq("fecha_entrega", fechaISO)
     .neq("estado", "cancelado")
     .order("id");
@@ -66,14 +66,12 @@ export default async function AdminRepartoPage({
   type Fila = {
     id: string;
     estado: string;
-    direccion_entrega: string | null;
     platillos: { nombre: string } | null;
     usuarios: { nombre: string; colonia: string | null; calle_numero: string | null; codigo_postal: string | null } | null;
   };
   const pedidos = (pedidosRaw ?? []) as unknown as Fila[];
 
   function direccionCompleta(p: Fila): string | null {
-    if (p.direccion_entrega) return p.direccion_entrega;
     const partes = [p.usuarios?.calle_numero, p.usuarios?.colonia, p.usuarios?.codigo_postal].filter(Boolean);
     return partes.length > 0 ? partes.join(", ") : null;
   }
