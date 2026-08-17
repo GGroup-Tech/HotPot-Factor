@@ -233,16 +233,25 @@ export interface Database {
         // Append-only ledger. No UPDATE / DELETE — enforce with RLS +
         // a DB trigger that raises on those ops. Balance is ALWAYS
         // SUM(cantidad), never a stored counter.
+        //
+        // Esquema real confirmado 2026-08-17 vía information_schema.columns:
+        // la referencia es UNA sola columna `referencia_id` (no
+        // `pedido_id`/`compra_id` separadas), las notas son `notas`
+        // (no `nota`), y el timestamp es `creado_en` (no `created_at`)
+        // — el esquema viejo estaba mal desde que se escribió este
+        // archivo y nunca se verificó contra la base real. Esto rompía
+        // TODO insert a esta tabla, incluido el webhook de Stripe: los
+        // pagos se registraban en `compras` pero el crédito nunca se
+        // otorgaba.
         Row: {
           id: string;
           usuario_id: string;
           cantidad: number; // + para compras/reingresos, - para consumo
           tipo: MovimientoTipo;
-          pedido_id: string | null;
-          compra_id: string | null;
-          nota: string | null;
+          referencia_id: string | null; // id del pedido o de la compra, según `tipo`
+          notas: string | null;
           creado_por: string | null; // staff.id when it's a manual adjustment
-          created_at: string;
+          creado_en: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["credito_movimientos"]["Row"]> & {
           usuario_id: string;
