@@ -231,7 +231,7 @@ export default async function AdminClientesPage({
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
-                        <ClienteActivoBoton usuarioId={f.id} activo={f.activo} />
+                        <ClienteActivoBoton usuarioId={f.id} activo={f.activo ?? false} />
                       </td>
                     </tr>
                   ))
