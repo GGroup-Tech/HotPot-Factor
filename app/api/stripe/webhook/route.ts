@@ -93,12 +93,16 @@ export async function POST(request: Request) {
   }
 
   // credito_movimientos is append-only: insert only, never update/delete.
+  // Corregido 2026-08-17: la columna real es `referencia_id` (no
+  // `compra_id`) y `notas` (no `nota`) — con los nombres viejos este
+  // insert fallaba SIEMPRE con PGRST204, así que cada pago exitoso de
+  // Stripe creaba la fila en `compras` pero nunca otorgaba el crédito.
   const { error: movError } = await admin.from("credito_movimientos").insert({
     usuario_id: usuarioId,
     cantidad: creditos,
     tipo: "compra",
-    compra_id: compra.id,
-    nota: `Compra de paquete ${paqueteId} via Stripe`,
+    referencia_id: compra.id,
+    notas: `Compra de paquete ${paqueteId} via Stripe`,
   });
 
   if (movError) {
