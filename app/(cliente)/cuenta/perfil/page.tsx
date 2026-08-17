@@ -1,9 +1,14 @@
 import { requireUsuario } from "@/lib/supabase/staff";
 import { PerfilForm } from "./PerfilForm";
 
-/** 10 — Mi perfil. */
+/**
+ * 10 — Mi perfil.
+ *
+ * `usuarios` no tiene columna `email` (vive solo en Supabase Auth) —
+ * por eso se pasa aparte desde `user.email`, no de la fila de `usuarios`.
+ */
 export default async function PerfilPage() {
-  const { usuario } = await requireUsuario();
+  const { user, usuario } = await requireUsuario();
 
   return (
     <div className="flex flex-col gap-8">
@@ -15,7 +20,17 @@ export default async function PerfilPage() {
         </p>
       </div>
 
-      <PerfilForm usuario={usuario} />
+      <PerfilForm
+        usuario={{
+          nombre: usuario.nombre,
+          apellido: usuario.apellido,
+          telefono: usuario.telefono,
+          colonia: usuario.colonia,
+          calleNumero: usuario.calle_numero,
+          codigoPostal: usuario.codigo_postal,
+        }}
+        email={user.email ?? ""}
+      />
     </div>
   );
 }
