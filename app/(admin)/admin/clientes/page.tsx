@@ -12,15 +12,35 @@ function toISODate(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** null si no hay fecha de nacimiento capturada. */
+function calcularEdad(fechaNac: string | null): number | null {
+  if (!fechaNac) return null;
+  const nacimiento = new Date(`${fechaNac}T00:00:00`);
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - nacimiento.getFullYear();
+  const noHaCumplidoAnos =
+    hoy.getMonth() < nacimiento.getMonth() ||
+    (hoy.getMonth() === nacimiento.getMonth() && hoy.getDate() < nacimiento.getDate());
+  if (noHaCumplidoAnos) edad--;
+  return edad;
+}
+
 /**
- * A1 — Admin · Clientes.
+ * A1 — Admin · Clientes. Figma node 115:2 (incluye ya la vista
+ * "Lista" con sus KPIs — la pestaña "Estadísticas", 304:7, muestra
+ * los mismos KPIs sin la tabla, así que se reutiliza el mismo cálculo
+ * en vez de duplicar consultas).
  *
- * `usuarios` no tiene columna `email` (vive solo en Supabase Auth) ni
- * `created_at` (es `creado_en`) — esto rompía la consulta COMPLETA de
- * clientes en silencio (PostgREST rechaza el `.select()` entero si
- * pide una columna que no existe), y por eso "0 clientes activos"
- * aunque sí hubiera clientes reales con `activo = true`. El correo se
- * trae aparte con `admin.auth.admin.listUsers()`.
+ * `createAdminClient()` — mismo motivo que Pedidos y A0: `requireStaff()`
+ * ya verificó identidad, así que las lecturas no dependen de RLS para
+ * staff (que nunca se configuró).
+ *
+ * Corregido 2026-08-17/18: `usuarios` no tiene `email` (vive en
+ * auth.users, se trae con `admin.auth.admin.listUsers()`) ni
+ * `created_at` (es `creado_en`) — con los nombres viejos la consulta
+ * completa fallaba en silencio, por eso el panel siempre mostraba "0
+ * clientes activos" sin importar cuántos hubiera. Se agrega
+ * `fecha_nac` → columna "Edad".
  */
 export default async function AdminClientesPage({
   searchParams,
@@ -45,7 +65,7 @@ export default async function AdminClientesPage({
     { data: paquetesActivos },
     { data: authUsers },
   ] = await Promise.all([
-    admin.from("usuarios").select("id, nombre, telefono, colonia, activo, creado_en"),
+    admin.from("usuarios").select("id, nombre, telefono, fecha_nac, colonia, activo, creado_en"),
     admin.from("saldo_creditos").select("usuario_id, saldo"),
     admin
       .from("compras")
@@ -95,6 +115,10 @@ export default async function AdminClientesPage({
   const recompraPct = conAlMenosUnaCompra > 0 ? Math.round((conMasDeUnaCompra / conAlMenosUnaCompra) * 100) : 0;
   const platillosEntregadosMes = (pedidos ?? []).filter((p) => p.estado === "entregado").length;
 
+  // La tabla usa TODOS los clientes (no solo `clientesActivos`) para
+  // que al marcar a alguien como inactivo no desaparezca de la lista
+  // sin forma de reactivarlo — los KPIs de arriba sí siguen usando
+  // solo `clientesActivos` a propósito, son métricas de la base activa.
   let filas = (usuarios ?? []).map((u) => {
     const saldo = saldoPorUsuario.get(u.id) ?? 0;
     const comprasUsuario = comprasPorUsuario.get(u.id) ?? [];
@@ -105,6 +129,7 @@ export default async function AdminClientesPage({
     return {
       ...u,
       email: emailPorId.get(u.id) ?? "—",
+      edad: calcularEdad(u.fecha_nac),
       saldo,
       paqueteReciente,
       proxEntrega: proxEntrega?.fecha_entrega ?? null,
@@ -196,11 +221,12 @@ export default async function AdminClientesPage({
           </div>
 
           <div className="w-full overflow-x-auto rounded-card border border-line bg-surface">
-            <table className="w-full min-w-[900px] border-collapse text-left">
+            <table className="w-full min-w-[980px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-line text-[10px] font-medium uppercase tracking-[1px] text-gold">
                   <th className="px-5 py-3.5 font-medium">Cliente</th>
                   <th className="px-5 py-3.5 font-medium">Contacto</th>
+                  <th className="px-5 py-3.5 font-medium">Edad</th>
                   <th className="px-5 py-3.5 font-medium">Paquete</th>
                   <th className="px-5 py-3.5 font-medium">Créditos</th>
                   <th className="px-5 py-3.5 font-medium">Próx. entrega</th>
@@ -211,7 +237,7 @@ export default async function AdminClientesPage({
               <tbody>
                 {filas.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-[14px] text-muted">
+                    <td colSpan={8} className="px-5 py-10 text-center text-[14px] text-muted">
                       No hay clientes que coincidan.
                     </td>
                   </tr>
@@ -220,6 +246,7 @@ export default async function AdminClientesPage({
                     <tr key={f.id} className="border-b border-line text-[13px] last:border-b-0">
                       <td className="px-5 py-3.5 font-medium text-cream">{f.nombre}</td>
                       <td className="px-5 py-3.5 text-muted">{f.email}</td>
+                      <td className="px-5 py-3.5 text-muted">{f.edad ?? "—"}</td>
                       <td className="px-5 py-3.5 text-muted">{f.paqueteReciente}</td>
                       <td className="px-5 py-3.5 text-muted">{f.saldo}</td>
                       <td className="px-5 py-3.5 text-muted">
