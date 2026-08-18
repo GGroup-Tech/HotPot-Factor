@@ -1,12 +1,7 @@
 import { requireUsuario } from "@/lib/supabase/staff";
 import { PerfilForm } from "./PerfilForm";
 
-/**
- * 10 — Mi perfil.
- *
- * `usuarios` no tiene columna `email` (vive solo en Supabase Auth) —
- * por eso se pasa aparte desde `user.email`, no de la fila de `usuarios`.
- */
+/** 10 — Mi perfil. */
 export default async function PerfilPage() {
   const { user, usuario } = await requireUsuario();
 
@@ -25,6 +20,7 @@ export default async function PerfilPage() {
           nombre: usuario.nombre,
           apellido: usuario.apellido,
           telefono: usuario.telefono,
+          fechaNac: usuario.fecha_nac,
           colonia: usuario.colonia,
           calleNumero: usuario.calle_numero,
           codigoPostal: usuario.codigo_postal,
