@@ -39,6 +39,7 @@ export async function crearCuenta(
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
   const telefono = String(formData.get("telefono") ?? "");
+  const fechaNac = String(formData.get("fecha_nac") ?? "").trim() || null;
   const calle = String(formData.get("calle") ?? "");
   const colonia = String(formData.get("colonia") ?? "");
   const codigoPostal = String(formData.get("codigo_postal") ?? "");
@@ -71,23 +72,17 @@ export async function crearCuenta(
   // Corregido 2026-08-18: esto antes usaba el cliente normal (anon +
   // sesión) con `.update()`, e IGNORABA el error si fallaba —
   // devolvía `ok: true` sin importar qué. Si Supabase Auth tiene
-  // "Confirm email" activado, `signUp()` NO deja una sesión activa
-  // hasta que el usuario confirma su correo; sin sesión, ese
-  // `.update()` lo bloqueaba RLS en silencio (0 filas afectadas, sin
-  // error explícito) y el flujo seguía de largo a /pago como si nada.
-  // Resultado: se creaba la cuenta en auth.users pero la fila en
-  // `usuarios` quedaba vacía — sin nombre, sin dirección, sin
-  // colonia — la "cuenta fantasma" reportada. Como /paquetes decide
-  // saltarse "Crear cuenta" con solo checar si hay sesión activa, la
-  // siguiente vez que esa persona entraba ya logueada brincaba
-  // directo a Pago sin que su perfil se hubiera completado nunca.
+  // "Confirm email" activado (confirmado que sí lo está), `signUp()`
+  // NO deja una sesión activa hasta que el usuario confirma su
+  // correo; sin sesión, ese `.update()` lo bloqueaba RLS en silencio
+  // y el flujo seguía de largo a /pago como si nada. Resultado: se
+  // creaba la cuenta en auth.users pero la fila en `usuarios` quedaba
+  // vacía — la "cuenta fantasma" reportada.
   //
   // Usar el cliente admin (service role) aquí evita depender por
-  // completo de si ya hay sesión activa o no — el `id` viene
-  // directo de `signUpData.user.id`, confiable sin importar el
-  // estado de la sesión. `upsert` en vez de `update` también cubre
-  // el caso de que el trigger `on_auth_user_created` no haya creado
-  // la fila todavía (o no exista).
+  // completo de si ya hay sesión activa o no. `upsert` en vez de
+  // `update` también cubre el caso de que el trigger
+  // `on_auth_user_created` no haya creado la fila todavía.
   const admin = createAdminClient();
   const { data: perfilGuardado, error: perfilError } = await admin
     .from("usuarios")
@@ -96,6 +91,7 @@ export async function crearCuenta(
       nombre,
       apellido,
       telefono: telefono || null,
+      fecha_nac: fechaNac,
       colonia,
       calle_numero: calle || null,
       codigo_postal: codigoPostal || null,
@@ -121,9 +117,7 @@ export async function crearCuenta(
 
   // Si Supabase Auth requiere confirmar correo, `signUp()` no deja
   // sesión activa — seguir de largo a /pago produciría un dead-end
-  // confuso ahí (el checkout necesita sesión). Se detiene aquí con un
-  // mensaje claro en vez de dejar que el usuario choque con un error
-  // sin contexto en el siguiente paso.
+  // confuso ahí (el checkout necesita sesión).
   if (!signUpData.session) {
     return { ok: false, requiereConfirmacion: true };
   }
