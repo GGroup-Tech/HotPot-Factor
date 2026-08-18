@@ -15,6 +15,14 @@ export interface ActualizarPerfilState {
   error?: string;
 }
 
+/**
+ * Corregido 2026-08-17/18: `usuarios` no tiene `direccion` (son
+ * `calle_numero` + `codigo_postal`) ni un solo campo `nombre`
+ * concatenado (`apellido` es columna propia NOT NULL) — con los
+ * nombres viejos esto fallaba SIEMPRE en silencio (columna
+ * inexistente = PGRST204), por eso "los datos no se guardan".
+ * `fecha_nac` agregada para el registro de edad.
+ */
 export async function actualizarPerfil(
   _prev: ActualizarPerfilState,
   formData: FormData,
@@ -31,6 +39,7 @@ export async function actualizarPerfil(
   const nombre = String(formData.get("nombre") ?? "").trim();
   const apellido = String(formData.get("apellido") ?? "").trim();
   const telefono = String(formData.get("telefono") ?? "").trim();
+  const fechaNac = String(formData.get("fecha_nac") ?? "").trim();
   const colonia = String(formData.get("colonia") ?? "").trim();
   const calleNumero = String(formData.get("calle_numero") ?? "").trim();
   const codigoPostal = String(formData.get("codigo_postal") ?? "").trim();
@@ -39,15 +48,17 @@ export async function actualizarPerfil(
     return { error: "El nombre y apellido son obligatorios." };
   }
 
-  // Corregido 2026-08-17: `usuarios` no tiene `direccion` — son
-  // `calle_numero` y `codigo_postal` por separado — y `apellido` es
-  // su propia columna NOT NULL, no parte de `nombre`.
+  // `.select().maybeSingle()` en vez de un `.update()` a secas: si RLS
+  // bloquea el UPDATE (falta una policy `for update`), Postgres/PostgREST
+  // no regresa error — regresa éxito con 0 filas afectadas. Sin este
+  // chequeo el form dice "Guardado." aunque nada haya cambiado.
   const { data: actualizado, error } = await supabase
     .from("usuarios")
     .update({
       nombre,
       apellido,
       telefono: telefono || null,
+      fecha_nac: fechaNac || null,
       colonia: colonia || null,
       calle_numero: calleNumero || null,
       codigo_postal: codigoPostal || null,
