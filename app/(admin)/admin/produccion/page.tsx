@@ -54,7 +54,9 @@ export default async function AdminProduccionPage({
   for (const p of pedidos) {
     const platillo = p.platillos as unknown as { id: string; nombre: string } | null;
     if (!platillo) continue;
-    const actual = porPlatillo.get(platillo.id) ?? { nombre: platillo.nombre, esComodin: p.es_comodin, cantidad: 0 };
+    // `es_comodin` es `boolean | null` en el esquema real — se
+    // normaliza a `false` cuando viene nulo.
+    const actual = porPlatillo.get(platillo.id) ?? { nombre: platillo.nombre, esComodin: p.es_comodin ?? false, cantidad: 0 };
     actual.cantidad += 1;
     porPlatillo.set(platillo.id, actual);
   }
