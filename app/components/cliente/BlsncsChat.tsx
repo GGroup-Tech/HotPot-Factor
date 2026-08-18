@@ -8,15 +8,21 @@ interface Mensaje {
 }
 
 /**
- * FAB Sofía con chat real — usa /api/sofia (Claude), que exige sesión
- * de usuario (lo garantiza el layout de (cliente)). Degrada con
- * gracia a un mensaje de error si falta ANTHROPIC_API_KEY (el
- * endpoint devuelve 503 con `error` en ese caso).
+ * FAB Blanca con chat real — usa /api/blanca (Claude). Ya no exige
+ * sesión (el endpoint funciona para invitados también), pero aquí en
+ * el área cliente siempre hay sesión por el layout de (cliente), así
+ * que Blanca recibe el contexto específico de este cliente además de
+ * la info general del negocio. Degrada con gracia a un mensaje de
+ * error si falta ANTHROPIC_API_KEY (el endpoint devuelve 503 con
+ * `error` en ese caso).
  */
-export function SofiaChat() {
+export function BlancaChat() {
   const [open, setOpen] = useState(false);
   const [mensajes, setMensajes] = useState<Mensaje[]>([
-    { role: "assistant", content: "Hola, soy Sofía. Pregúntame sobre tus créditos, entregas o el menú de la semana." },
+    {
+      role: "assistant",
+      content: "Hola, soy Blanca. Pregúntame sobre tus créditos, tus entregas, el menú de la semana o cómo funciona el servicio.",
+    },
   ]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -33,19 +39,19 @@ export function SofiaChat() {
     setError(null);
 
     try {
-      const res = await fetch("/api/sofia", {
+      const res = await fetch("/api/blanca", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: nuevos }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Sofía no pudo responder. Intenta de nuevo.");
+        setError(data.error ?? "Blanca no pudo responder. Intenta de nuevo.");
         return;
       }
       setMensajes((prev) => [...prev, { role: "assistant", content: data.reply }]);
     } catch {
-      setError("No se pudo conectar con Sofía. Revisa tu conexión.");
+      setError("No se pudo conectar con Blanca. Revisa tu conexión.");
     } finally {
       setPending(false);
     }
@@ -56,7 +62,7 @@ export function SofiaChat() {
       {open && (
         <div className="flex h-[420px] w-[calc(100vw-64px)] max-w-[340px] flex-col overflow-hidden rounded-card border border-line bg-surface shadow-xl">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <p className="text-[14px] font-medium text-cream">Sofía</p>
+            <p className="text-[14px] font-medium text-cream">Blanca</p>
             <button
               type="button"
               onClick={() => setOpen(false)}
@@ -80,7 +86,7 @@ export function SofiaChat() {
                 {m.content}
               </div>
             ))}
-            {pending && <p className="text-[12px] text-muted">Sofía está escribiendo…</p>}
+            {pending && <p className="text-[12px] text-muted">Blanca está escribiendo…</p>}
             {error && <p className="text-[12px] text-danger">{error}</p>}
           </div>
 
@@ -106,10 +112,10 @@ export function SofiaChat() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-label="Pregúntale a Sofía"
+        aria-label="Pregúntale a Blanca"
         className="flex size-14 items-center justify-center rounded-full bg-gold text-[24px] font-semibold text-ink font-display shadow-lg transition-transform hover:scale-105"
       >
-        S
+        B
       </button>
     </div>
   );
