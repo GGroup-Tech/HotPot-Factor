@@ -162,7 +162,9 @@ export async function obtenerCalendarioMes(
       id: p.id,
       platilloId: p.platillo_id ?? "",
       platilloNombre: platillo?.nombre ?? "—",
-      esComodin: p.es_comodin,
+      // `es_comodin` es `boolean | null` en el esquema real — se
+      // normaliza a `false` cuando viene nulo.
+      esComodin: p.es_comodin ?? false,
     });
   }
 
