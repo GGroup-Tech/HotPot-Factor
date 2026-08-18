@@ -6,7 +6,7 @@ import { PaquetesSection } from "@/app/components/sitio/PaquetesSection";
 import { MenuSemanalSection } from "@/app/components/sitio/MenuSemanalSection";
 import { FAQSection } from "@/app/components/sitio/FAQSection";
 import { CtaFinal } from "@/app/components/sitio/CtaFinal";
-import { SofiaFabGuest } from "@/app/components/sitio/SofiaFabGuest";
+import { BlancaFabGuest } from "@/app/components/sitio/BlancaFabGuest";
 
 /** Landing v2 — Sin membresía. Figma node 244:2. */
 export default function LandingPage() {
@@ -22,7 +22,7 @@ export default function LandingPage() {
         <CtaFinal />
       </main>
       <Footer />
-      <SofiaFabGuest />
+      <BlancaFabGuest />
     </div>
   );
 }
