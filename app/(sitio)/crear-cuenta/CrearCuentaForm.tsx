@@ -105,6 +105,12 @@ export function CrearCuentaForm({ paqueteId }: { paqueteId: string }) {
           Te agregamos a la lista de espera — te avisamos por correo en cuanto lleguemos a tu zona.
         </div>
       )}
+      {state.requiereConfirmacion && (
+        <div className="w-full rounded-card-sm border border-gold bg-gold/10 px-5 py-4 text-[15px] text-gold">
+          Te mandamos un correo de confirmación. Ábrelo y confirma tu cuenta, luego inicia sesión para continuar
+          con tu compra.
+        </div>
+      )}
       {state.error && (
         <div className="w-full rounded-card-sm border border-danger bg-danger/10 px-5 py-4 text-[15px] text-danger">
           {state.error}
