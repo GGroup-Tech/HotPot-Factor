@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ClienteSidebar } from "./ClienteSidebar";
-import { SofiaChat } from "./SofiaChat";
+import { BlancaChat } from "./BlancaChat";
 import { cerrarSesion } from "@/app/(cliente)/cuenta/actions";
 
 /**
@@ -49,7 +49,7 @@ export function ClienteChrome({
         <ClienteSidebar />
         <main className="min-w-0 flex-1">{children}</main>
       </div>
-      <SofiaChat />
+      <BlancaChat />
     </div>
   );
 }
