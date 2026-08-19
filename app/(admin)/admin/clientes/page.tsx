@@ -37,33 +37,73 @@ function bucketEdad(edad: number | null): string {
 }
 const ORDEN_EDAD = ["18-24", "25-34", "35-44", "45-54", "55+", "Sin dato"];
 
-function bucketFrecuencia(totalPedidos: number): string {
-  if (totalPedidos === 0) return "0 pedidos";
-  if (totalPedidos <= 3) return "1-3 pedidos";
-  if (totalPedidos <= 8) return "4-8 pedidos";
-  return "9+ pedidos";
-}
-const ORDEN_FRECUENCIA = ["0 pedidos", "1-3 pedidos", "4-8 pedidos", "9+ pedidos"];
-
-function bucketAntiguedad(creadoEn: string | null, hoy: Date): string {
-  if (!creadoEn) return "Sin dato";
-  const meses = (hoy.getTime() - new Date(creadoEn).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-  if (meses < 1) return "< 1 mes";
-  if (meses < 3) return "1-3 meses";
-  if (meses < 6) return "3-6 meses";
-  if (meses < 12) return "6-12 meses";
-  return "12+ meses";
-}
-const ORDEN_ANTIGUEDAD = ["< 1 mes", "1-3 meses", "3-6 meses", "6-12 meses", "12+ meses", "Sin dato"];
+type Periodo = "semana" | "mes";
 
 /**
- * A1 — Admin · Clientes. Figma node 115:2 (incluye ya la vista
- * "Lista" con sus KPIs — la pestaña "Estadísticas", 304:7, ahora
- * incluye 5 gráficas de barras (CSS puro, sin librería): paquete más
- * comprado, edad, frecuencia de pedidos, canal de adquisición y
- * tiempo como cliente. Agregado 2026-08-18 a pedido del usuario;
- * "canal de adquisición" y "tiempo como cliente" fueron sugeridas y
- * confirmadas con él antes de construir.
+ * Corregido 2026-08-18 a partir de feedback del usuario: contar
+ * pedidos totales en buckets fijos (0, 1-3, 4-8, 9+) mezclaba un
+ * cliente nuevo con pocos pedidos con uno viejo que casi no compra —
+ * se veían igual aunque su comportamiento fuera muy distinto. Ahora
+ * es una TASA (pedidos ÷ tiempo activo), medida desde su primer
+ * pedido (no desde que se registró — si tardó en arrancar, eso no
+ * debería diluir su frecuencia real una vez que empezó). `periodo`
+ * es dinámico vía query param, igual que `vista`/`filtro`.
+ */
+function calcularFrecuencia(
+  totalPedidos: number,
+  primeraFechaPedido: string | undefined,
+  hoy: Date,
+  periodo: Periodo,
+): number {
+  if (totalPedidos === 0 || !primeraFechaPedido) return 0;
+  const diasActivo = Math.max(
+    1,
+    (hoy.getTime() - new Date(`${primeraFechaPedido}T00:00:00`).getTime()) / (1000 * 60 * 60 * 24),
+  );
+  if (periodo === "semana") {
+    return totalPedidos / Math.max(1, diasActivo / 7);
+  }
+  return totalPedidos / Math.max(1, diasActivo / 30.44);
+}
+
+function bucketFrecuencia(rate: number, periodo: Periodo): string {
+  if (rate === 0) return "Inactivo";
+  if (periodo === "semana") {
+    if (rate < 1) return "< 1 / semana";
+    if (rate < 3) return "1-3 / semana";
+    return "3+ / semana";
+  }
+  if (rate < 4) return "< 4 / mes";
+  if (rate < 12) return "4-12 / mes";
+  return "12+ / mes";
+}
+const ORDEN_FRECUENCIA_SEMANA = ["Inactivo", "< 1 / semana", "1-3 / semana", "3+ / semana"];
+const ORDEN_FRECUENCIA_MES = ["Inactivo", "< 4 / mes", "4-12 / mes", "12+ / mes"];
+
+/**
+ * Reemplaza "Tiempo como cliente" (antigüedad desde el registro) —
+ * a petición del usuario: da igual si un cliente lleva 6 meses
+ * registrado si no ha vuelto a comprar. Recurrencia de compra
+ * (cuántas veces ha comprado un paquete) es la métrica que de verdad
+ * importa; usa los mismos datos de `compras` que ya trae la página, y
+ * de hecho reemplaza con más detalle el KPI "RECOMPRA %" de arriba
+ * (ahora como distribución completa, no un solo número).
+ */
+function bucketRecurrencia(numCompras: number): string {
+  if (numCompras === 0) return "Sin compras";
+  if (numCompras === 1) return "1 compra";
+  if (numCompras === 2) return "2 compras";
+  if (numCompras <= 4) return "3-4 compras";
+  return "5+ compras";
+}
+const ORDEN_RECURRENCIA = ["Sin compras", "1 compra", "2 compras", "3-4 compras", "5+ compras"];
+
+/**
+ * A1 — Admin · Clientes. Figma node 115:2. Pestaña "Estadísticas"
+ * (304:7) con 5 gráficas CSS puras (sin librería): paquete más
+ * comprado y canal de adquisición en dona (composición de un total);
+ * edad, frecuencia de pedidos y recurrencia de compra en barras
+ * (distribuciones con orden/progresión).
  *
  * `createAdminClient()` — mismo motivo que Pedidos y A0: `requireStaff()`
  * ya verificó identidad, así que las lecturas no dependen de RLS para
@@ -72,11 +112,12 @@ const ORDEN_ANTIGUEDAD = ["< 1 mes", "1-3 meses", "3-6 meses", "6-12 meses", "12
 export default async function AdminClientesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; filtro?: string; vista?: string }>;
+  searchParams: Promise<{ q?: string; filtro?: string; vista?: string; periodo?: string }>;
 }) {
   await requireStaff();
   const admin = createAdminClient();
-  const { q, filtro = "todos", vista = "lista" } = await searchParams;
+  const { q, filtro = "todos", vista = "lista", periodo: periodoParam } = await searchParams;
+  const periodo: Periodo = periodoParam === "mes" ? "mes" : "semana";
 
   const hoy = new Date();
   const hoyISO = toISODate(hoy);
@@ -106,10 +147,10 @@ export default async function AdminClientesPage({
       .gte("fecha_entrega", toISODate(primerDiaMes)),
     admin.from("paquetes").select("precio_mxn, creditos").eq("activo", true),
     admin.auth.admin.listUsers({ perPage: 1000 }),
-    // Histórico completo (sin filtro de fecha) solo para la gráfica de
-    // frecuencia de pedidos — necesita el total de vida del cliente,
-    // no solo lo del mes actual como el resto de la página.
-    admin.from("pedidos").select("usuario_id, estado").neq("estado", "cancelado"),
+    // Histórico completo (sin filtro de fecha) para la gráfica de
+    // frecuencia — necesita el total de vida del cliente y la fecha
+    // de su primer pedido, no solo lo del mes actual.
+    admin.from("pedidos").select("usuario_id, fecha_entrega, estado").neq("estado", "cancelado"),
   ]);
 
   const emailPorId = new Map((authUsers?.users ?? []).map((u) => [u.id, u.email ?? "—"]));
@@ -168,17 +209,23 @@ export default async function AdminClientesPage({
     valor: edadConteo.get(etiqueta) ?? 0,
   }));
 
-  // --- Estadísticas: frecuencia de pedidos (histórico completo, no solo este mes) ---
+  // --- Estadísticas: frecuencia de pedidos (tasa, no conteo bruto) ---
   const pedidosPorClienteTotal = new Map<string, number>();
+  const primerPedidoPorCliente = new Map<string, string>();
   for (const p of pedidosHistorialRaw ?? []) {
     pedidosPorClienteTotal.set(p.usuario_id, (pedidosPorClienteTotal.get(p.usuario_id) ?? 0) + 1);
+    const actual = primerPedidoPorCliente.get(p.usuario_id);
+    if (!actual || p.fecha_entrega < actual) primerPedidoPorCliente.set(p.usuario_id, p.fecha_entrega);
   }
   const frecuenciaConteo = new Map<string, number>();
   for (const u of clientesActivos) {
-    const bucket = bucketFrecuencia(pedidosPorClienteTotal.get(u.id) ?? 0);
+    const totalPedidos = pedidosPorClienteTotal.get(u.id) ?? 0;
+    const rate = calcularFrecuencia(totalPedidos, primerPedidoPorCliente.get(u.id), hoy, periodo);
+    const bucket = bucketFrecuencia(rate, periodo);
     frecuenciaConteo.set(bucket, (frecuenciaConteo.get(bucket) ?? 0) + 1);
   }
-  const frecuenciaStats = ORDEN_FRECUENCIA.map((etiqueta) => ({ etiqueta, valor: frecuenciaConteo.get(etiqueta) ?? 0 }));
+  const ordenFrecuencia = periodo === "semana" ? ORDEN_FRECUENCIA_SEMANA : ORDEN_FRECUENCIA_MES;
+  const frecuenciaStats = ordenFrecuencia.map((etiqueta) => ({ etiqueta, valor: frecuenciaConteo.get(etiqueta) ?? 0 }));
 
   // --- Estadísticas: canal de adquisición ---
   const canalConteo = new Map<string, number>();
@@ -188,15 +235,16 @@ export default async function AdminClientesPage({
   }
   const canalStats = [...canalConteo.entries()].sort((a, b) => b[1] - a[1]).map(([etiqueta, valor]) => ({ etiqueta, valor }));
 
-  // --- Estadísticas: tiempo como cliente ---
-  const antiguedadConteo = new Map<string, number>();
+  // --- Estadísticas: recurrencia de compra ---
+  const recurrenciaConteo = new Map<string, number>();
   for (const u of clientesActivos) {
-    const bucket = bucketAntiguedad(u.creado_en, hoy);
-    antiguedadConteo.set(bucket, (antiguedadConteo.get(bucket) ?? 0) + 1);
+    const numCompras = comprasPorUsuario.get(u.id)?.length ?? 0;
+    const bucket = bucketRecurrencia(numCompras);
+    recurrenciaConteo.set(bucket, (recurrenciaConteo.get(bucket) ?? 0) + 1);
   }
-  const antiguedadStats = ORDEN_ANTIGUEDAD.filter((b) => antiguedadConteo.has(b)).map((etiqueta) => ({
+  const recurrenciaStats = ORDEN_RECURRENCIA.filter((b) => recurrenciaConteo.has(b)).map((etiqueta) => ({
     etiqueta,
-    valor: antiguedadConteo.get(etiqueta) ?? 0,
+    valor: recurrenciaConteo.get(etiqueta) ?? 0,
   }));
 
   // La tabla usa TODOS los clientes (no solo `clientesActivos`) para
@@ -233,7 +281,7 @@ export default async function AdminClientesPage({
   }
 
   const qs = (params: Record<string, string>) => {
-    const merged = { q: q ?? "", filtro, vista, ...params };
+    const merged = { q: q ?? "", filtro, vista, periodo, ...params };
     const usp = new URLSearchParams(Object.entries(merged).filter(([, v]) => v));
     return `/admin/clientes?${usp.toString()}`;
   };
@@ -280,15 +328,47 @@ export default async function AdminClientesPage({
       </div>
 
       {vista === "estadisticas" && (
-        <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Composición de un total → dona */}
-          <EstadisticaDona titulo="Paquete más comprado" filas={paqueteStats} vacio="Todavía no hay compras registradas." />
-          <EstadisticaDona titulo="Canal de adquisición" filas={canalStats} />
-          {/* Distribuciones con orden (18-24 → 55+, 0 pedidos → 9+, < 1 mes → 12+ meses) → barras, para no perder la progresión */}
-          <EstadisticaBarras titulo="Edad de los clientes" filas={edadStats} colorBarra="bg-success" vacio="Ningún cliente activo tiene fecha de nacimiento capturada." />
-          <EstadisticaBarras titulo="Frecuencia de pedidos (histórico)" filas={frecuenciaStats} colorBarra="bg-warning" />
-          <EstadisticaBarras titulo="Tiempo como cliente" filas={antiguedadStats} colorBarra="bg-success" />
-        </div>
+        <>
+          <div className="flex items-center gap-2">
+            <p className="text-[12px] text-muted">Frecuencia de pedidos medida por:</p>
+            <a
+              href={qs({ periodo: "semana" })}
+              className={`rounded-control border px-3 py-[6px] text-[12px] font-medium ${
+                periodo === "semana" ? "border-gold bg-raised text-gold" : "border-line text-muted"
+              }`}
+            >
+              Semana
+            </a>
+            <a
+              href={qs({ periodo: "mes" })}
+              className={`rounded-control border px-3 py-[6px] text-[12px] font-medium ${
+                periodo === "mes" ? "border-gold bg-raised text-gold" : "border-line text-muted"
+              }`}
+            >
+              Mes
+            </a>
+          </div>
+
+          <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* Composición de un total → dona */}
+            <EstadisticaDona titulo="Paquete más comprado" filas={paqueteStats} vacio="Todavía no hay compras registradas." />
+            <EstadisticaDona titulo="Canal de adquisición" filas={canalStats} />
+            {/* Distribuciones con orden → barras, para no perder la progresión */}
+            <EstadisticaBarras titulo="Edad de los clientes" filas={edadStats} colorBarra="bg-success" vacio="Ningún cliente activo tiene fecha de nacimiento capturada." />
+            <EstadisticaBarras
+              titulo={`Frecuencia de pedidos (por ${periodo})`}
+              filas={frecuenciaStats}
+              colorBarra="bg-warning"
+              vacio="Todavía no hay pedidos registrados."
+            />
+            <EstadisticaBarras
+              titulo="Recurrencia de compra"
+              filas={recurrenciaStats}
+              colorBarra="bg-success"
+              vacio="Todavía no hay compras registradas."
+            />
+          </div>
+        </>
       )}
 
       {vista === "lista" && (
