@@ -168,7 +168,7 @@ export default async function AdminClientesPage({
   const emailPorId = new Map((authUsers?.users ?? []).map((u) => [u.id, u.email ?? "—"]));
 
   const saldoPorUsuario = new Map((saldos ?? []).map((s) => [s.usuario_id, s.saldo]));
-  const comprasPorUsuario = new Map<string, { monto_mxn: number; creado_en: string; paquete: string | null }[]>();
+  const comprasPorUsuario = new Map<string, { monto_mxn: number; creado_en: string | null; paquete: string | null }[]>();
   for (const c of compras ?? []) {
     const lista = comprasPorUsuario.get(c.usuario_id) ?? [];
     lista.push({ monto_mxn: c.monto_mxn, creado_en: c.creado_en, paquete: (c.paquetes as unknown as { nombre: string } | null)?.nombre ?? null });
