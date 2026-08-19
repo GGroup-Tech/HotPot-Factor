@@ -134,11 +134,13 @@ export default async function AdminFinanzasPage({
     { data: comprasConPaquete },
     { data: platillosActivos },
   ] = await Promise.all([
+    // `creado_en`, no `created_at` — confirmado 2026-08-19 vía
+    // information_schema (ver auditoría de Finanzas).
     admin
       .from("compras")
-      .select("monto_mxn, created_at, paquetes(nombre)")
-      .gte("created_at", inicioPeriodo.toISOString())
-      .lte("created_at", finPeriodo.toISOString()),
+      .select("monto_mxn, creado_en, paquetes(nombre)")
+      .gte("creado_en", inicioPeriodo.toISOString())
+      .lte("creado_en", finPeriodo.toISOString()),
     admin
       .from("gastos")
       .select("id, descripcion, monto_mxn, fecha, proveedor, recurrente, pagado, fecha_vencimiento, categoria_id, categorias_gasto(nombre)")
@@ -186,7 +188,7 @@ export default async function AdminFinanzasPage({
   };
   const listaGastos = (gastos ?? []) as unknown as Gasto[];
 
-  type CompraConPaquete = { monto_mxn: number; created_at: string; paquetes: { nombre: string } | null };
+  type CompraConPaquete = { monto_mxn: number; creado_en: string; paquetes: { nombre: string } | null };
   const listaCompras = (compras ?? []) as unknown as CompraConPaquete[];
 
   const ingresos = (compras ?? []).reduce((acc, c) => acc + c.monto_mxn, 0);
@@ -374,7 +376,7 @@ export default async function AdminFinanzasPage({
   // período de arriba (Este mes = 1 barra, Trimestre = 3, etc.).
   const ingresosPorMes = new Map<string, number>();
   for (const c of compras ?? []) {
-    const fecha = new Date(c.created_at);
+    const fecha = new Date(c.creado_en);
     const key = `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}`;
     ingresosPorMes.set(key, (ingresosPorMes.get(key) ?? 0) + c.monto_mxn);
   }
