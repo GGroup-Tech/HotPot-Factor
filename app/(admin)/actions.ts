@@ -142,6 +142,14 @@ export async function quitarComodinMes(anio: number, mes: number, platilloId: st
  * esos dos campos del formulario en vez de fingir que se guardan.
  * `mes_contable`/`anio_contable` se derivan de `fecha` al crear (no
  * hay control aparte en el modal original para desacoplarlos).
+ *
+ * Corregido 2026-08-19 (auditoría de Finanzas): `categoria_id` es
+ * NOT NULL en la base real (confirmado vía information_schema), pero
+ * el formulario tenía una opción "Sin categoría" que mandaba `null` —
+ * eso hacía fallar el insert SIEMPRE que se eligiera esa opción, sin
+ * ningún aviso claro más que el error genérico. Ahora se valida que
+ * venga una categoría antes de intentar el insert (y el <select> del
+ * formulario en FinanzasClientForms.tsx ya no ofrece "Sin categoría").
  */
 export async function registrarGasto(formData: FormData): Promise<AccionAdminResult> {
   const { staff } = await requireStaff();
@@ -149,7 +157,7 @@ export async function registrarGasto(formData: FormData): Promise<AccionAdminRes
 
   const descripcion = String(formData.get("descripcion") ?? "").trim();
   const montoStr = String(formData.get("monto_mxn") ?? "");
-  const categoriaId = String(formData.get("categoria_id") ?? "") || null;
+  const categoriaId = String(formData.get("categoria_id") ?? "").trim();
   const fecha = String(formData.get("fecha") ?? "");
   const proveedor = String(formData.get("proveedor") ?? "").trim() || null;
   const recurrente = formData.get("recurrente") === "on";
@@ -157,8 +165,8 @@ export async function registrarGasto(formData: FormData): Promise<AccionAdminRes
   const fechaVencimiento = String(formData.get("fecha_vencimiento") ?? "").trim() || null;
 
   const monto = Number(montoStr);
-  if (!descripcion || !fecha || !Number.isFinite(monto) || monto <= 0) {
-    return { ok: false, error: "Revisa la descripción, el monto y la fecha." };
+  if (!descripcion || !categoriaId || !fecha || !Number.isFinite(monto) || monto <= 0) {
+    return { ok: false, error: "Revisa la descripción, la categoría, el monto y la fecha." };
   }
 
   const fechaDate = new Date(`${fecha}T00:00:00`);
