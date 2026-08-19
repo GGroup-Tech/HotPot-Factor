@@ -14,6 +14,29 @@ export const runtime = "nodejs";
  * unique-violation as "already handled, no-op" — Stripe retries the
  * same event on any non-2xx response, so this must be safe to run
  * more than once for the same payment_intent_id.
+ *
+ * Corregido 2026-08-19 (auditoría de Finanzas): el insert a `compras`
+ * usaba `stripe_payment_intent_id` (columna que NO EXISTE — el nombre
+ * real es `payment_ref`) y nunca mandaba `creditos`, que es NOT NULL
+ * en la base real. Ambos hacían que el insert a `compras` fallara
+ * SIEMPRE, en cada pago exitoso de Stripe — es decir, el cliente
+ * quedaba cobrado pero nunca recibía sus créditos, sin ningún error
+ * visible más que un log en el servidor. Esquema real confirmado
+ * 2026-08-19 vía information_schema.columns:
+ * `compras(id, usuario_id, paquete_id NOT NULL, creditos NOT NULL,
+ * monto_mxn NOT NULL, cupon_id, descuento_mxn, payment_ref NOT NULL,
+ * creado_en)`.
+ *
+ * IMPORTANTE si ya intentaste una compra de prueba antes de este fix:
+ * el primer insert a `pagos_procesados` (el "claim" de idempotencia)
+ * SÍ se alcanza a guardar antes de que el insert a `compras` fallara,
+ * así que puede haber quedado un renglón en `pagos_procesados` con
+ * `compra_id` en null para ese `payment_intent_id`. Mientras exista,
+ * un reintento de Stripe para ese mismo pago se deduplica y JAMÁS
+ * vuelve a intentar el insert, aunque el código ya esté arreglado.
+ * Bórralo con:
+ *   delete from pagos_procesados where compra_id is null;
+ * antes de volver a probar un pago.
  */
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -81,8 +104,9 @@ export async function POST(request: Request) {
     .insert({
       usuario_id: usuarioId,
       paquete_id: paqueteId,
+      creditos,
       monto_mxn: (paymentIntent.amount_received ?? paymentIntent.amount) / 100,
-      stripe_payment_intent_id: paymentIntent.id,
+      payment_ref: paymentIntent.id,
     })
     .select()
     .single();
@@ -93,10 +117,8 @@ export async function POST(request: Request) {
   }
 
   // credito_movimientos is append-only: insert only, never update/delete.
-  // Corregido 2026-08-17: la columna real es `referencia_id` (no
-  // `compra_id`) y `notas` (no `nota`) — con los nombres viejos este
-  // insert fallaba SIEMPRE con PGRST204, así que cada pago exitoso de
-  // Stripe creaba la fila en `compras` pero nunca otorgaba el crédito.
+  // La columna real es `referencia_id` (no `compra_id`) y `notas` (no
+  // `nota`) — confirmado 2026-08-17.
   const { error: movError } = await admin.from("credito_movimientos").insert({
     usuario_id: usuarioId,
     cantidad: creditos,
