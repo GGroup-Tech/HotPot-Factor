@@ -5,16 +5,24 @@ import { createClient } from "@/lib/supabase/server";
 const currency = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 });
 const fecha = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", year: "numeric" });
 
-/** 09 — Mis compras. */
+/**
+ * 09 — Mis compras.
+ *
+ * Corregido 2026-08-19 (auditoría de Finanzas): `compras` no tiene
+ * columna `created_at` — el nombre real es `creado_en` (confirmado
+ * vía information_schema). Con el tipo viejo esto compilaba pero
+ * fallaba en producción porque PostgREST rechaza un `.select()` que
+ * pida una columna inexistente.
+ */
 export default async function ComprasPage() {
   const { user } = await requireUsuario();
   const supabase = await createClient();
 
   const { data: compras } = await supabase
     .from("compras")
-    .select("id, monto_mxn, created_at, paquetes(nombre, creditos)")
+    .select("id, monto_mxn, creado_en, paquetes(nombre, creditos)")
     .eq("usuario_id", user.id)
-    .order("created_at", { ascending: false });
+    .order("creado_en", { ascending: false });
 
   return (
     <div className="flex flex-col gap-8">
@@ -42,7 +50,7 @@ export default async function ComprasPage() {
                 <div className="flex flex-col gap-1">
                   <p className="text-[15px] font-medium text-cream">{paquete?.nombre ?? "Paquete"}</p>
                   <p className="text-[13px] text-muted">
-                    {fecha.format(new Date(c.created_at))}
+                    {c.creado_en ? fecha.format(new Date(c.creado_en)) : "—"}
                     {paquete && ` · ${paquete.creditos} créditos`}
                   </p>
                 </div>
