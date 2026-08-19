@@ -108,8 +108,6 @@ export default async function AdminFinanzasPage({
   else if (periodo === "semestre") inicioPeriodo = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1);
   else if (periodo === "anio") inicioPeriodo = new Date(hoy.getFullYear(), 0, 1);
   else inicioPeriodo = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  const mesesEnPeriodo =
-    (finPeriodo.getFullYear() - inicioPeriodo.getFullYear()) * 12 + (finPeriodo.getMonth() - inicioPeriodo.getMonth()) + 1;
 
   const mesActual = hoy.getMonth() + 1;
   const anioActual = hoy.getFullYear();
@@ -163,7 +161,14 @@ export default async function AdminFinanzasPage({
     admin.from("gastos").select("monto_mxn"),
     admin.from("pedidos").select("platillo_id, platillos(costo_mxn)").eq("estado", "entregado"),
     admin.from("usuarios").select("id, creado_en, activo, desactivado_en, como_nos_conocio"),
-    admin.from("compras").select("usuario_id, monto_mxn, paquetes(creditos)"),
+    // `compras.creditos` guarda un snapshot de los créditos otorgados
+    // AL MOMENTO de esa compra (confirmado 2026-08-19 vía
+    // information_schema — la columna sí existe, NOT NULL). Se usa
+    // directo en vez de unir con `paquetes(creditos)`, porque ese join
+    // trae el valor ACTUAL del paquete — si algún día editas cuántos
+    // créditos trae un paquete, el join distorsionaría retroactivamente
+    // el pasivo histórico de todos los clientes que compraron antes.
+    admin.from("compras").select("usuario_id, monto_mxn, creditos"),
     admin.from("platillos").select("costo_mxn").eq("activo", true),
   ]);
 
@@ -197,7 +202,20 @@ export default async function AdminFinanzasPage({
   }
   const categoriasOrdenadas = [...porCategoria.entries()].sort((a, b) => b[1] - a[1]);
 
-  const gastoMarketing = listaGastos.filter((g) => (g.categorias_gasto?.nombre ?? "").toLowerCase().includes("marketing")).reduce((a, g) => a + g.monto_mxn, 0);
+  // Coincide contra varios sinónimos (no solo "marketing") porque el
+  // nombre de la categoría es texto libre capturado por el admin —
+  // auditoría 2026-08-19: con un solo término, una categoría llamada
+  // "Publicidad" o "Mercadotecnia" hacía que el CAC se viera como "sin
+  // gastos" sin ningún aviso. Sigue siendo un match de texto (no hay
+  // columna `es_marketing` en `categorias_gasto`), así que un nombre
+  // fuera de esta lista todavía puede quedar sin detectar.
+  const PALABRAS_MARKETING = ["marketing", "mercadotecnia", "publicidad", "ads", "anuncio"];
+  const gastoMarketing = listaGastos
+    .filter((g) => {
+      const nombre = (g.categorias_gasto?.nombre ?? "").toLowerCase();
+      return PALABRAS_MARKETING.some((palabra) => nombre.includes(palabra));
+    })
+    .reduce((a, g) => a + g.monto_mxn, 0);
 
   // ---------- CAC y clientes nuevos por canal ----------
   // Agregado 2026-08-14 a partir de `usuarios.como_nos_conocio`
@@ -236,7 +254,7 @@ export default async function AdminFinanzasPage({
   // de catálogo actual que puede haber cambiado.
   const comprasPorUsuarioPasivo = new Map<string, { montoTotal: number; creditosTotal: number }>();
   for (const c of comprasConPaquete ?? []) {
-    const creditos = (c.paquetes as unknown as { creditos: number } | null)?.creditos ?? 0;
+    const creditos = c.creditos ?? 0;
     const acc = comprasPorUsuarioPasivo.get(c.usuario_id) ?? { montoTotal: 0, creditosTotal: 0 };
     acc.montoTotal += c.monto_mxn;
     acc.creditosTotal += creditos;
@@ -263,15 +281,30 @@ export default async function AdminFinanzasPage({
   const utilidadBruta = ingresos - costoProduccionPeriodo;
 
   // ---------- Depreciación (real, de activos_fijos) ----------
+  // Corregido 2026-08-19 (auditoría): la versión anterior cargaba
+  // `mesesEnPeriodo` completos de depreciación con tal de que quedara
+  // vida útil, sin importar si el activo se compró A MITAD del
+  // período — un activo comprado el día 28 dentro de "Este mes"
+  // restaba igual 1 mes completo de depreciación por solo 2-3 días de
+  // posesión real. Ahora se calcula como la DIFERENCIA entre la
+  // depreciación acumulada al final del período y al inicio, que
+  // automáticamente da ~0 para un activo recién comprado a mitad de
+  // período y reparte el resto en los períodos siguientes.
+  function depreciacionAcumuladaAsOf(
+    a: { valor_compra_mxn: number; fecha_compra: string; vida_util_meses: number },
+    hasta: Date,
+  ): number {
+    const fechaCompra = new Date(`${a.fecha_compra}T00:00:00`);
+    const mensual = a.valor_compra_mxn / a.vida_util_meses;
+    const mesesElapsed = Math.min(a.vida_util_meses, mesesTranscurridos(fechaCompra, hasta));
+    return mensual * mesesElapsed;
+  }
   const activosActivos = (activosFijos ?? []).filter((a) => a.activo);
   let depreciacionPeriodo = 0;
   for (const a of activosActivos) {
-    const fechaCompra = new Date(`${a.fecha_compra}T00:00:00`);
-    const mensual = a.valor_compra_mxn / a.vida_util_meses;
-    const yaTranscurridosAlIniciarPeriodo = mesesTranscurridos(fechaCompra, inicioPeriodo);
-    const mesesRestantesVidaUtil = Math.max(0, a.vida_util_meses - yaTranscurridosAlIniciarPeriodo);
-    const mesesADepreciarEnPeriodo = Math.min(mesesEnPeriodo, mesesRestantesVidaUtil);
-    depreciacionPeriodo += mensual * mesesADepreciarEnPeriodo;
+    const acumuladaAlInicio = depreciacionAcumuladaAsOf(a, inicioPeriodo);
+    const acumuladaAlFin = depreciacionAcumuladaAsOf(a, finPeriodo);
+    depreciacionPeriodo += Math.max(0, acumuladaAlFin - acumuladaAlInicio);
   }
 
   // ---------- Cascada de P&L ----------
@@ -416,7 +449,11 @@ export default async function AdminFinanzasPage({
           <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi etiqueta="INGRESOS" valor={`$${currency.format(ingresos)}`} nota="cobrado por Stripe" destacado />
             <Kpi etiqueta="GASTOS" valor={`$${currency.format(totalGastos)}`} nota={`${listaGastos.length} registrados`} />
-            <Kpi etiqueta="UTILIDAD" valor={`$${currency.format(utilidad)}`} nota={`margen ${margen}%`} />
+            <Kpi
+              etiqueta="UTILIDAD (CAJA)"
+              valor={`$${currency.format(utilidad)}`}
+              nota={`margen ${margen}% · ingresos − gastos, sin costo de producción ni ISR — ve a P&L para la utilidad neta real`}
+            />
             <Kpi etiqueta="CRÉDITOS PENDIENTES" valor={String(saldoTotal)} nota="vendidos sin consumir" />
           </div>
 
