@@ -188,7 +188,7 @@ export default async function AdminFinanzasPage({
   };
   const listaGastos = (gastos ?? []) as unknown as Gasto[];
 
-  type CompraConPaquete = { monto_mxn: number; creado_en: string; paquetes: { nombre: string } | null };
+  type CompraConPaquete = { monto_mxn: number; creado_en: string | null; paquetes: { nombre: string } | null };
   const listaCompras = (compras ?? []) as unknown as CompraConPaquete[];
 
   const ingresos = (compras ?? []).reduce((acc, c) => acc + c.monto_mxn, 0);
@@ -376,6 +376,10 @@ export default async function AdminFinanzasPage({
   // período de arriba (Este mes = 1 barra, Trimestre = 3, etc.).
   const ingresosPorMes = new Map<string, number>();
   for (const c of compras ?? []) {
+    // `creado_en` es nullable en el esquema real — en la práctica
+    // siempre lo llena el DEFAULT now() de la base, pero una compra
+    // sin fecha no se puede ubicar en ningún mes, así que se omite.
+    if (!c.creado_en) continue;
     const fecha = new Date(c.creado_en);
     const key = `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}`;
     ingresosPorMes.set(key, (ingresosPorMes.get(key) ?? 0) + c.monto_mxn);
