@@ -106,7 +106,16 @@ Platillos disponibles como comodín este mes (hasta 2 por cliente, en vez del pl
 `.trim();
 }
 
-/** Contexto específico de ESTE cliente — solo se agrega si hay sesión activa. */
+/**
+ * Contexto específico de ESTE cliente — solo se agrega si hay sesión
+ * activa.
+ *
+ * Corregido 2026-08-19 (auditoría de Finanzas): `compras` no tiene
+ * columna `created_at` — el nombre real es `creado_en` (confirmado
+ * vía information_schema). Con el tipo viejo esto compilaba pero
+ * `ultimaCompra` siempre venía null en producción, así que Blanca
+ * nunca lograba decir el último paquete comprado de nadie.
+ */
 async function construirContextoCliente(supabase: SupabaseServerClient, usuarioId: string) {
   const hoy = new Date();
   const hoyISO = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
@@ -125,9 +134,9 @@ async function construirContextoCliente(supabase: SupabaseServerClient, usuarioI
       .maybeSingle(),
     supabase
       .from("compras")
-      .select("monto_mxn, created_at, paquetes(nombre, creditos)")
+      .select("monto_mxn, creado_en, paquetes(nombre, creditos)")
       .eq("usuario_id", usuarioId)
-      .order("created_at", { ascending: false })
+      .order("creado_en", { ascending: false })
       .limit(1)
       .maybeSingle(),
   ]);
