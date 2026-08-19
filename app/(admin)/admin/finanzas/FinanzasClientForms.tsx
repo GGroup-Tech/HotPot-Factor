@@ -68,8 +68,14 @@ export function GastoForm({ categorias, hoyISO }: { categorias: { id: string; no
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Campo label="Categoría">
-          <select name="categoria_id" className="input">
-            <option value="">Sin categoría</option>
+          {/* `categoria_id` es NOT NULL en la base real (confirmado
+              2026-08-19 vía information_schema) — antes esta opción
+              "Sin categoría" mandaba null y el insert fallaba siempre
+              que se elegía. Ahora es obligatorio elegir una. */}
+          <select name="categoria_id" required defaultValue="" className="input">
+            <option value="" disabled>
+              Selecciona una categoría
+            </option>
             {categorias.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.nombre}
@@ -107,6 +113,11 @@ export function GastoForm({ categorias, hoyISO }: { categorias: { id: string; no
         {pending ? "Guardando…" : "Guardar gasto"}
       </button>
       {error && <p className="text-[12px] text-danger">{error}</p>}
+      {categorias.length === 0 && (
+        <p className="text-[12px] text-warning">
+          Todavía no hay categorías de gasto capturadas — necesitas al menos una en `categorias_gasto` antes de poder registrar un gasto.
+        </p>
+      )}
     </form>
   );
 }
