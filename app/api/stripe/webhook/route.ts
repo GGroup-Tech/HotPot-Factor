@@ -8,35 +8,30 @@ export const runtime = "nodejs";
 /**
  * Idempotent Stripe webhook.
  *
- * Idempotency comes from `pagos_procesados` having `payment_intent_id`
- * as its PRIMARY KEY: every handler path does an
- * `insert(...).select()` against that table FIRST, and treats a
- * unique-violation as "already handled, no-op" — Stripe retries the
- * same event on any non-2xx response, so this must be safe to run
- * more than once for the same payment_intent_id.
+ * Idempotency comes from `pagos_procesados` having `payment_ref` as its
+ * PRIMARY KEY (confirmado 2026-08-19 vía information_schema +
+ * table_constraints): every handler path does an `insert(...)` against
+ * that table FIRST, and treats a unique-violation as "already handled,
+ * no-op" — Stripe retries the same event on any non-2xx response, so
+ * this must be safe to run more than once for the same payment.
  *
- * Corregido 2026-08-19 (auditoría de Finanzas): el insert a `compras`
- * usaba `stripe_payment_intent_id` (columna que NO EXISTE — el nombre
- * real es `payment_ref`) y nunca mandaba `creditos`, que es NOT NULL
- * en la base real. Ambos hacían que el insert a `compras` fallara
- * SIEMPRE, en cada pago exitoso de Stripe — es decir, el cliente
- * quedaba cobrado pero nunca recibía sus créditos, sin ningún error
- * visible más que un log en el servidor. Esquema real confirmado
- * 2026-08-19 vía information_schema.columns:
- * `compras(id, usuario_id, paquete_id NOT NULL, creditos NOT NULL,
- * monto_mxn NOT NULL, cupon_id, descuento_mxn, payment_ref NOT NULL,
- * creado_en)`.
+ * Corregido 2026-08-19 (segunda vuelta — primer intento de compra de
+ * prueba real): el insert a `pagos_procesados` usaba columnas que NO
+ * EXISTEN (`payment_intent_id`, y un update posterior a `compra_id`,
+ * que tampoco existe). Esquema real confirmado vía SQL:
+ * `pagos_procesados(payment_ref PK NOT NULL, usuario_id FK NOT NULL,
+ * monto_mxn NOT NULL, procesado_en)` — es decir, esta tabla es solo un
+ * log plano de idempotencia (pago ya visto sí/no), sin relación hacia
+ * `compras`. Por eso el claim ahora necesita `usuario_id`/`monto_mxn`
+ * desde el arranque, así que la metadata del PaymentIntent se lee
+ * ANTES del insert de claim (antes se leía después). También se quitó
+ * el `update` final a `pagos_procesados` — no hay columna que
+ * actualizar; una vez insertado el claim, ya no hace falta tocarlo.
  *
- * IMPORTANTE si ya intentaste una compra de prueba antes de este fix:
- * el primer insert a `pagos_procesados` (el "claim" de idempotencia)
- * SÍ se alcanza a guardar antes de que el insert a `compras` fallara,
- * así que puede haber quedado un renglón en `pagos_procesados` con
- * `compra_id` en null para ese `payment_intent_id`. Mientras exista,
- * un reintento de Stripe para ese mismo pago se deduplica y JAMÁS
- * vuelve a intentar el insert, aunque el código ya esté arreglado.
- * Bórralo con:
- *   delete from pagos_procesados where compra_id is null;
- * antes de volver a probar un pago.
+ * Fix previo (mismo día, primera vuelta): el insert a `compras` usaba
+ * `stripe_payment_intent_id` (columna que NO EXISTE — el nombre real
+ * es `payment_ref`) y nunca mandaba `creditos`, que es NOT NULL en la
+ * base real. Ese fix sigue vigente abajo.
  */
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -75,11 +70,23 @@ export async function POST(request: Request) {
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
   const admin = createAdminClient();
 
-  // Claim the payment_intent_id first. If it's already there, another
-  // webhook delivery (or a retry) already processed it — stop here.
-  const { error: claimError } = await admin
-    .from("pagos_procesados")
-    .insert({ payment_intent_id: paymentIntent.id });
+  const usuarioId = paymentIntent.metadata?.usuario_id;
+  const paqueteId = paymentIntent.metadata?.paquete_id;
+  const creditos = Number(paymentIntent.metadata?.creditos ?? 0);
+  const montoMxn = (paymentIntent.amount_received ?? paymentIntent.amount) / 100;
+
+  if (!usuarioId || !paqueteId || !creditos) {
+    console.error("payment_intent missing required metadata", paymentIntent.id);
+    return NextResponse.json({ error: "missing metadata" }, { status: 400 });
+  }
+
+  // Claim the payment_ref first. If it's already there, another webhook
+  // delivery (or a Stripe retry) already processed it — stop here.
+  const { error: claimError } = await admin.from("pagos_procesados").insert({
+    payment_ref: paymentIntent.id,
+    usuario_id: usuarioId,
+    monto_mxn: montoMxn,
+  });
 
   if (claimError) {
     // Postgres unique_violation = 23505
@@ -90,22 +97,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "internal" }, { status: 500 });
   }
 
-  const usuarioId = paymentIntent.metadata?.usuario_id;
-  const paqueteId = paymentIntent.metadata?.paquete_id;
-  const creditos = Number(paymentIntent.metadata?.creditos ?? 0);
-
-  if (!usuarioId || !paqueteId || !creditos) {
-    console.error("payment_intent missing required metadata", paymentIntent.id);
-    return NextResponse.json({ error: "missing metadata" }, { status: 400 });
-  }
-
   const { data: compra, error: compraError } = await admin
     .from("compras")
     .insert({
       usuario_id: usuarioId,
       paquete_id: paqueteId,
       creditos,
-      monto_mxn: (paymentIntent.amount_received ?? paymentIntent.amount) / 100,
+      monto_mxn: montoMxn,
       payment_ref: paymentIntent.id,
     })
     .select()
@@ -131,11 +129,6 @@ export async function POST(request: Request) {
     console.error("credito_movimientos insert failed", movError);
     return NextResponse.json({ error: "internal" }, { status: 500 });
   }
-
-  await admin
-    .from("pagos_procesados")
-    .update({ compra_id: compra.id })
-    .eq("payment_intent_id", paymentIntent.id);
 
   return NextResponse.json({ received: true });
 }
