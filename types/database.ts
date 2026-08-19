@@ -8,10 +8,10 @@
  *
  * Tables below have been corrected against real information_schema.columns
  * output as bugs surfaced (see inline notes per table) — `usuarios`,
- * `pedidos`, and `credito_movimientos` are now confirmed-real. The rest
- * are the original hand-written guesses and haven't caused reported
- * bugs, but are still unverified — regenerate this file for real before
- * launch (tracked as pending hardening work).
+ * `pedidos`, `credito_movimientos`, and `compras` are now confirmed-real.
+ * The rest are the original hand-written guesses and haven't caused
+ * reported bugs, but are still unverified — regenerate this file for
+ * real before launch (tracked as pending hardening work).
  *
  * Every table below declares `Relationships: []` even where a real FK
  * exists — @supabase/supabase-js's generic table constraint requires
@@ -189,20 +189,33 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["lista_espera"]["Row"]>;
         Relationships: [];
       };
-      // Sin verificar contra information_schema todavía (pendiente
-      // #58, checklist de Stripe) — mantiene la forma que ya usa el
-      // código (checkout, webhook, confirmación). Si la verificación
-      // encuentra diferencias, hay que actualizar este bloque.
+      // Esquema real confirmado 2026-08-19 vía information_schema.columns
+      // (auditoría de Finanzas). `creditos` (snapshot de créditos
+      // otorgados EN ESA compra, no viene de `paquetes`) y `payment_ref`
+      // (no `stripe_payment_intent_id`) son NOT NULL — el nombre viejo
+      // de esa columna hacía fallar el insert del webhook de Stripe en
+      // CADA pago exitoso. `cupon_id`/`descuento_mxn` existen pero
+      // ningún flujo los llena todavía (no hay cupones conectados al
+      // checkout). Timestamp es `creado_en`, no `created_at`.
       compras: {
         Row: {
           id: string;
           usuario_id: string;
           paquete_id: string;
+          creditos: number;
           monto_mxn: number;
-          stripe_payment_intent_id: string | null;
-          created_at: string;
+          cupon_id: string | null;
+          descuento_mxn: number | null;
+          payment_ref: string;
+          creado_en: string | null;
         };
-        Insert: Partial<Database["public"]["Tables"]["compras"]["Row"]>;
+        Insert: Partial<Database["public"]["Tables"]["compras"]["Row"]> & {
+          usuario_id: string;
+          paquete_id: string;
+          creditos: number;
+          monto_mxn: number;
+          payment_ref: string;
+        };
         Update: Partial<Database["public"]["Tables"]["compras"]["Row"]>;
         Relationships: [
           {
@@ -305,6 +318,7 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["uso_cupones"]["Row"]>;
         Relationships: [];
       };
+      // Esquema real confirmado 2026-08-19 vía information_schema.columns.
       categorias_gasto: {
         Row: {
           id: string;
@@ -314,23 +328,34 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["categorias_gasto"]["Row"]>;
         Relationships: [];
       };
+      // Esquema real confirmado 2026-08-19 vía information_schema.columns.
+      // `categoria_id` es NOT NULL — un formulario que mandara `null`
+      // (opción "Sin categoría") hacía fallar el insert siempre.
       gastos: {
         Row: {
           id: string;
           descripcion: string;
-          categoria_id: string | null;
+          categoria_id: string;
           monto_mxn: number;
           fecha: string;
           proveedor: string | null;
-          recurrente: boolean;
+          recurrente: boolean | null;
           mes_contable: number;
           anio_contable: number;
           registrado_por: string | null; // staff.id
           pagado: boolean;
           fecha_vencimiento: string | null;
-          creado_en: string;
+          creado_en: string | null;
         };
-        Insert: Partial<Database["public"]["Tables"]["gastos"]["Row"]>;
+        Insert: Partial<Database["public"]["Tables"]["gastos"]["Row"]> & {
+          descripcion: string;
+          categoria_id: string;
+          monto_mxn: number;
+          fecha: string;
+          mes_contable: number;
+          anio_contable: number;
+          pagado: boolean;
+        };
         Update: Partial<Database["public"]["Tables"]["gastos"]["Row"]>;
         Relationships: [
           {
@@ -342,12 +367,13 @@ export interface Database {
           },
         ];
       };
+      // Esquema real confirmado 2026-08-19 vía information_schema.columns.
       meses_contables: {
         Row: {
           id: string;
           anio: number;
           mes: number; // 1-12
-          cerrado: boolean;
+          cerrado: boolean | null;
           cerrado_en: string | null;
           cerrado_por: string | null; // staff.id
         };
@@ -355,6 +381,7 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["meses_contables"]["Row"]>;
         Relationships: [];
       };
+      // Esquema real confirmado 2026-08-19 vía information_schema.columns.
       metas_mensuales: {
         Row: {
           id: string;
@@ -369,6 +396,7 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["metas_mensuales"]["Row"]>;
         Relationships: [];
       };
+      // Esquema real confirmado 2026-08-19 vía information_schema.columns.
       activos_fijos: {
         Row: {
           id: string;
@@ -383,7 +411,8 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["activos_fijos"]["Row"]>;
         Relationships: [];
       };
-      // Tabla singleton — siempre se usa la fila más reciente.
+      // Tabla singleton — siempre se usa la fila más reciente. Esquema
+      // real confirmado 2026-08-19 vía information_schema.columns.
       configuracion_financiera: {
         Row: {
           id: string;
@@ -395,6 +424,7 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["configuracion_financiera"]["Row"]>;
         Relationships: [];
       };
+      // Esquema real confirmado 2026-08-19 vía information_schema.columns.
       cuentas_bancarias: {
         Row: {
           id: string;
@@ -406,6 +436,8 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["cuentas_bancarias"]["Row"]>;
         Relationships: [];
       };
+      // Esquema real confirmado 2026-08-19 vía information_schema.columns.
+      // `nota` (singular) — confirmado, distinto de `credito_movimientos.notas`.
       capital_movimientos: {
         Row: {
           id: string;
