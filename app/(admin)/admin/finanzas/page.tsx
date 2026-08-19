@@ -136,7 +136,11 @@ export default async function AdminFinanzasPage({
     { data: comprasConPaquete },
     { data: platillosActivos },
   ] = await Promise.all([
-    admin.from("compras").select("monto_mxn, created_at").gte("created_at", inicioPeriodo.toISOString()).lte("created_at", finPeriodo.toISOString()),
+    admin
+      .from("compras")
+      .select("monto_mxn, created_at, paquetes(nombre)")
+      .gte("created_at", inicioPeriodo.toISOString())
+      .lte("created_at", finPeriodo.toISOString()),
     admin
       .from("gastos")
       .select("id, descripcion, monto_mxn, fecha, proveedor, recurrente, pagado, fecha_vencimiento, categoria_id, categorias_gasto(nombre)")
@@ -176,6 +180,9 @@ export default async function AdminFinanzasPage({
     categorias_gasto: { nombre: string } | null;
   };
   const listaGastos = (gastos ?? []) as unknown as Gasto[];
+
+  type CompraConPaquete = { monto_mxn: number; created_at: string; paquetes: { nombre: string } | null };
+  const listaCompras = (compras ?? []) as unknown as CompraConPaquete[];
 
   const ingresos = (compras ?? []).reduce((acc, c) => acc + c.monto_mxn, 0);
   const totalGastos = listaGastos.reduce((acc, g) => acc + g.monto_mxn, 0);
@@ -353,6 +360,19 @@ export default async function AdminFinanzasPage({
     };
   });
 
+  // ---------- Desglose de entradas/salidas del período ----------
+  // Entradas: por paquete comprado (`ingresos` ya es cash cobrado por
+  // Stripe, aquí solo se reparte por qué se cobró). Salidas: reusa
+  // `categoriasOrdenadas`, que ya se calcula arriba para el Resumen —
+  // no es un cálculo nuevo, solo se muestra también aquí con el
+  // desglose visual (dona) en vez de solo tarjetas.
+  const ingresosPorPaquete = new Map<string, number>();
+  for (const c of listaCompras) {
+    const nombre = c.paquetes?.nombre ?? "Sin paquete";
+    ingresosPorPaquete.set(nombre, (ingresosPorPaquete.get(nombre) ?? 0) + c.monto_mxn);
+  }
+  const ingresosPorPaqueteOrdenados = [...ingresosPorPaquete.entries()].sort((a, b) => b[1] - a[1]);
+
   const qs = (params: Record<string, string>) => {
     const merged = { vista, periodo, ...params };
     return `/admin/finanzas?${new URLSearchParams(merged).toString()}`;
@@ -476,6 +496,21 @@ export default async function AdminFinanzasPage({
       {vista === "flujo" && (
         <>
           <FlujoBarras filas={flujoPorMes} />
+
+          <p className="text-[18px] font-medium text-cream">Desglose del período</p>
+          <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2">
+            <DonaFinanzas
+              titulo="Entradas por paquete"
+              filas={ingresosPorPaqueteOrdenados.map(([etiqueta, valor]) => ({ etiqueta, valor }))}
+              vacio="Sin compras en este período."
+            />
+            <DonaFinanzas
+              titulo="Salidas por categoría"
+              filas={categoriasOrdenadas.map(([etiqueta, valor]) => ({ etiqueta, valor }))}
+              vacio="Sin gastos en este período."
+            />
+          </div>
+
           <div className="flex max-w-[700px] flex-col gap-1 rounded-card border border-line bg-surface p-6">
             <p className="mb-2 text-[12px] font-medium uppercase tracking-[1px] text-gold">Flujo de caja — total del período</p>
             <p className="mb-2 text-[12px] text-muted">
@@ -865,6 +900,66 @@ function FlujoBarras({ filas }: { filas: { etiqueta: string; ingresos: number; g
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Mismos tokens que EstadisticaDona (admin/Clientes) — categoría → %
+// del total, aquí en pesos en vez de conteo. Composición de un total
+// (paquete/categoría) sigue siendo el caso de uso correcto para dona,
+// no barras (no hay progresión/orden entre categorías).
+const PALETA_FINANZAS = ["#C9A15C", "#7FB069", "#D9A441", "#C0654F", "#9A8E7A", "#E2D5BD"];
+
+function DonaFinanzas({
+  titulo,
+  filas,
+  vacio = "Sin datos en este período.",
+}: {
+  titulo: string;
+  filas: { etiqueta: string; valor: number }[];
+  vacio?: string;
+}) {
+  const total = filas.reduce((acc, f) => acc + f.valor, 0);
+  let acumulado = 0;
+  const segmentos = filas.map((f, i) => {
+    const inicio = total > 0 ? (acumulado / total) * 100 : 0;
+    acumulado += f.valor;
+    const fin = total > 0 ? (acumulado / total) * 100 : 0;
+    return { ...f, color: PALETA_FINANZAS[i % PALETA_FINANZAS.length], inicio, fin };
+  });
+  const gradiente = total > 0 ? `conic-gradient(${segmentos.map((s) => `${s.color} ${s.inicio}% ${s.fin}%`).join(", ")})` : "#33291F";
+
+  return (
+    <div className="flex flex-col gap-4 rounded-card border border-line bg-surface px-6 py-5">
+      <p className="text-[13px] font-medium text-cream">{titulo}</p>
+      {total === 0 ? (
+        <p className="text-[13px] text-muted">{vacio}</p>
+      ) : (
+        <div className="flex items-center gap-6">
+          <div className="relative size-[120px] shrink-0 rounded-full" style={{ background: gradiente }}>
+            <div className="absolute inset-[14px] flex flex-col items-center justify-center rounded-full bg-surface">
+              <p className="font-display text-[14px] font-semibold text-cream">${currency.format(total)}</p>
+              <p className="text-[10px] text-muted">total</p>
+            </div>
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            {segmentos.map((s) => {
+              const pct = Math.round((s.valor / total) * 100);
+              return (
+                <div key={s.etiqueta} className="flex items-center justify-between gap-3 text-[12px]">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="size-[8px] shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                    <p className="truncate text-cream">{s.etiqueta}</p>
+                  </div>
+                  <p className="shrink-0 text-muted">
+                    ${currency.format(s.valor)} · {pct}%
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
