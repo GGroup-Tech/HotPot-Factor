@@ -1,6 +1,8 @@
 import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ClienteActivoBoton } from "./ClienteActivoBoton";
+import { EstadisticaBarras } from "./EstadisticaBarras";
+import { EstadisticaDona } from "./EstadisticaDona";
 
 const currency = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 });
 const fechaCorta = new Intl.DateTimeFormat("es-MX", { weekday: "short", day: "numeric", month: "short" });
@@ -25,22 +27,47 @@ function calcularEdad(fechaNac: string | null): number | null {
   return edad;
 }
 
+function bucketEdad(edad: number | null): string {
+  if (edad === null) return "Sin dato";
+  if (edad < 25) return "18-24";
+  if (edad < 35) return "25-34";
+  if (edad < 45) return "35-44";
+  if (edad < 55) return "45-54";
+  return "55+";
+}
+const ORDEN_EDAD = ["18-24", "25-34", "35-44", "45-54", "55+", "Sin dato"];
+
+function bucketFrecuencia(totalPedidos: number): string {
+  if (totalPedidos === 0) return "0 pedidos";
+  if (totalPedidos <= 3) return "1-3 pedidos";
+  if (totalPedidos <= 8) return "4-8 pedidos";
+  return "9+ pedidos";
+}
+const ORDEN_FRECUENCIA = ["0 pedidos", "1-3 pedidos", "4-8 pedidos", "9+ pedidos"];
+
+function bucketAntiguedad(creadoEn: string | null, hoy: Date): string {
+  if (!creadoEn) return "Sin dato";
+  const meses = (hoy.getTime() - new Date(creadoEn).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+  if (meses < 1) return "< 1 mes";
+  if (meses < 3) return "1-3 meses";
+  if (meses < 6) return "3-6 meses";
+  if (meses < 12) return "6-12 meses";
+  return "12+ meses";
+}
+const ORDEN_ANTIGUEDAD = ["< 1 mes", "1-3 meses", "3-6 meses", "6-12 meses", "12+ meses", "Sin dato"];
+
 /**
  * A1 — Admin · Clientes. Figma node 115:2 (incluye ya la vista
- * "Lista" con sus KPIs — la pestaña "Estadísticas", 304:7, muestra
- * los mismos KPIs sin la tabla, así que se reutiliza el mismo cálculo
- * en vez de duplicar consultas).
+ * "Lista" con sus KPIs — la pestaña "Estadísticas", 304:7, ahora
+ * incluye 5 gráficas de barras (CSS puro, sin librería): paquete más
+ * comprado, edad, frecuencia de pedidos, canal de adquisición y
+ * tiempo como cliente. Agregado 2026-08-18 a pedido del usuario;
+ * "canal de adquisición" y "tiempo como cliente" fueron sugeridas y
+ * confirmadas con él antes de construir.
  *
  * `createAdminClient()` — mismo motivo que Pedidos y A0: `requireStaff()`
  * ya verificó identidad, así que las lecturas no dependen de RLS para
  * staff (que nunca se configuró).
- *
- * Corregido 2026-08-17/18: `usuarios` no tiene `email` (vive en
- * auth.users, se trae con `admin.auth.admin.listUsers()`) ni
- * `created_at` (es `creado_en`) — con los nombres viejos la consulta
- * completa fallaba en silencio, por eso el panel siempre mostraba "0
- * clientes activos" sin importar cuántos hubiera. Se agrega
- * `fecha_nac` → columna "Edad".
  */
 export default async function AdminClientesPage({
   searchParams,
@@ -64,8 +91,9 @@ export default async function AdminClientesPage({
     { data: pedidos },
     { data: paquetesActivos },
     { data: authUsers },
+    { data: pedidosHistorialRaw },
   ] = await Promise.all([
-    admin.from("usuarios").select("id, nombre, telefono, fecha_nac, colonia, activo, creado_en"),
+    admin.from("usuarios").select("id, nombre, telefono, fecha_nac, colonia, activo, creado_en, como_nos_conocio"),
     admin.from("saldo_creditos").select("usuario_id, saldo"),
     admin
       .from("compras")
@@ -78,6 +106,10 @@ export default async function AdminClientesPage({
       .gte("fecha_entrega", toISODate(primerDiaMes)),
     admin.from("paquetes").select("precio_mxn, creditos").eq("activo", true),
     admin.auth.admin.listUsers({ perPage: 1000 }),
+    // Histórico completo (sin filtro de fecha) solo para la gráfica de
+    // frecuencia de pedidos — necesita el total de vida del cliente,
+    // no solo lo del mes actual como el resto de la página.
+    admin.from("pedidos").select("usuario_id, estado").neq("estado", "cancelado"),
   ]);
 
   const emailPorId = new Map((authUsers?.users ?? []).map((u) => [u.id, u.email ?? "—"]));
@@ -114,6 +146,58 @@ export default async function AdminClientesPage({
   const conAlMenosUnaCompra = comprasPorUsuario.size;
   const recompraPct = conAlMenosUnaCompra > 0 ? Math.round((conMasDeUnaCompra / conAlMenosUnaCompra) * 100) : 0;
   const platillosEntregadosMes = (pedidos ?? []).filter((p) => p.estado === "entregado").length;
+
+  // --- Estadísticas: paquete más comprado ---
+  const comprasPorPaquete = new Map<string, number>();
+  for (const c of compras ?? []) {
+    const nombre = (c.paquetes as unknown as { nombre: string } | null)?.nombre ?? "Sin paquete";
+    comprasPorPaquete.set(nombre, (comprasPorPaquete.get(nombre) ?? 0) + 1);
+  }
+  const paqueteStats = [...comprasPorPaquete.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([etiqueta, valor]) => ({ etiqueta, valor }));
+
+  // --- Estadísticas: edad ---
+  const edadConteo = new Map<string, number>();
+  for (const u of clientesActivos) {
+    const bucket = bucketEdad(calcularEdad(u.fecha_nac));
+    edadConteo.set(bucket, (edadConteo.get(bucket) ?? 0) + 1);
+  }
+  const edadStats = ORDEN_EDAD.filter((b) => edadConteo.has(b)).map((etiqueta) => ({
+    etiqueta,
+    valor: edadConteo.get(etiqueta) ?? 0,
+  }));
+
+  // --- Estadísticas: frecuencia de pedidos (histórico completo, no solo este mes) ---
+  const pedidosPorClienteTotal = new Map<string, number>();
+  for (const p of pedidosHistorialRaw ?? []) {
+    pedidosPorClienteTotal.set(p.usuario_id, (pedidosPorClienteTotal.get(p.usuario_id) ?? 0) + 1);
+  }
+  const frecuenciaConteo = new Map<string, number>();
+  for (const u of clientesActivos) {
+    const bucket = bucketFrecuencia(pedidosPorClienteTotal.get(u.id) ?? 0);
+    frecuenciaConteo.set(bucket, (frecuenciaConteo.get(bucket) ?? 0) + 1);
+  }
+  const frecuenciaStats = ORDEN_FRECUENCIA.map((etiqueta) => ({ etiqueta, valor: frecuenciaConteo.get(etiqueta) ?? 0 }));
+
+  // --- Estadísticas: canal de adquisición ---
+  const canalConteo = new Map<string, number>();
+  for (const u of clientesActivos) {
+    const canal = u.como_nos_conocio?.trim() || "No especificado";
+    canalConteo.set(canal, (canalConteo.get(canal) ?? 0) + 1);
+  }
+  const canalStats = [...canalConteo.entries()].sort((a, b) => b[1] - a[1]).map(([etiqueta, valor]) => ({ etiqueta, valor }));
+
+  // --- Estadísticas: tiempo como cliente ---
+  const antiguedadConteo = new Map<string, number>();
+  for (const u of clientesActivos) {
+    const bucket = bucketAntiguedad(u.creado_en, hoy);
+    antiguedadConteo.set(bucket, (antiguedadConteo.get(bucket) ?? 0) + 1);
+  }
+  const antiguedadStats = ORDEN_ANTIGUEDAD.filter((b) => antiguedadConteo.has(b)).map((etiqueta) => ({
+    etiqueta,
+    valor: antiguedadConteo.get(etiqueta) ?? 0,
+  }));
 
   // La tabla usa TODOS los clientes (no solo `clientesActivos`) para
   // que al marcar a alguien como inactivo no desaparezca de la lista
@@ -194,6 +278,18 @@ export default async function AdminClientesPage({
         <KpiChica etiqueta="PLATILLOS ENTREGADOS" valor={String(platillosEntregadosMes)} nota="acumulado este mes" color="text-cream" />
         <KpiChica etiqueta="ZONAS ACTIVAS" valor={String(zonasActivas)} nota="colonias con clientes" color="text-cream" />
       </div>
+
+      {vista === "estadisticas" && (
+        <div className="grid w-full grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Composición de un total → dona */}
+          <EstadisticaDona titulo="Paquete más comprado" filas={paqueteStats} vacio="Todavía no hay compras registradas." />
+          <EstadisticaDona titulo="Canal de adquisición" filas={canalStats} />
+          {/* Distribuciones con orden (18-24 → 55+, 0 pedidos → 9+, < 1 mes → 12+ meses) → barras, para no perder la progresión */}
+          <EstadisticaBarras titulo="Edad de los clientes" filas={edadStats} colorBarra="bg-success" vacio="Ningún cliente activo tiene fecha de nacimiento capturada." />
+          <EstadisticaBarras titulo="Frecuencia de pedidos (histórico)" filas={frecuenciaStats} colorBarra="bg-warning" />
+          <EstadisticaBarras titulo="Tiempo como cliente" filas={antiguedadStats} colorBarra="bg-success" />
+        </div>
+      )}
 
       {vista === "lista" && (
         <>
