@@ -451,16 +451,24 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["capital_movimientos"]["Row"]>;
         Relationships: [];
       };
+      // Esquema real confirmado 2026-08-19 vía information_schema +
+      // table_constraints (el bloque anterior tenía columnas
+      // inventadas — payment_intent_id/compra_id/procesado_at NO
+      // existen — que causaron un 500 real en el primer intento de
+      // compra de prueba). PRIMARY KEY (payment_ref) -> hace
+      // idempotente al webhook de Stripe por construcción. No tiene
+      // relación hacia `compras` (es solo un log plano de "ya visto").
       pagos_procesados: {
-        // PRIMARY KEY (payment_intent_id) -> hace idempotente al
-        // webhook de Stripe por construcción.
         Row: {
-          payment_intent_id: string;
-          compra_id: string | null;
-          procesado_at: string;
+          payment_ref: string;
+          usuario_id: string;
+          monto_mxn: number;
+          procesado_en: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["pagos_procesados"]["Row"]> & {
-          payment_intent_id: string;
+          payment_ref: string;
+          usuario_id: string;
+          monto_mxn: number;
         };
         Update: Partial<Database["public"]["Tables"]["pagos_procesados"]["Row"]>;
         Relationships: [];
