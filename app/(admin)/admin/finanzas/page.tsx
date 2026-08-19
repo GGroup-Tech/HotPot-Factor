@@ -17,6 +17,7 @@ import {
 
 const currency = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 });
 const fechaCorta = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" });
+const MESES_CORTO = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -29,6 +30,17 @@ function mesesTranscurridos(fechaCompra: Date, hasta: Date) {
   let meses = (hasta.getFullYear() - fechaCompra.getFullYear()) * 12 + (hasta.getMonth() - fechaCompra.getMonth());
   if (hasta.getDate() < fechaCompra.getDate()) meses -= 1;
   return Math.max(0, meses);
+}
+/** Lista de meses (año+mes) entre `inicio` y `fin`, inclusive por mes calendario. */
+function mesesEntre(inicio: Date, fin: Date): { anio: number; mesNum: number }[] {
+  const meses: { anio: number; mesNum: number }[] = [];
+  let cursor = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+  const finCursor = new Date(fin.getFullYear(), fin.getMonth(), 1);
+  while (cursor <= finCursor) {
+    meses.push({ anio: cursor.getFullYear(), mesNum: cursor.getMonth() + 1 });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  return meses;
 }
 
 const TABS = [
@@ -57,6 +69,15 @@ const PERIODOS = [
  * capital_movimientos) + columnas (`platillos.costo_mxn`,
  * `gastos.pagado`/`fecha_vencimiento`, `usuarios.desactivado_en`) para
  * reemplazar los bloques "no disponible" por cálculos reales.
+ *
+ * Ampliado de nuevo 2026-08-19: pestaña "Flujo de caja" ahora incluye
+ * una gráfica de barras (entradas vs. salidas por mes, CSS puro, sin
+ * librería — mismo criterio que las estadísticas de Clientes). Se
+ * reusan `compras`/`gastos` que ya se traían para el período
+ * seleccionado, solo se agrupan por mes en vez de sumarse en un único
+ * total. El rango de meses de la gráfica sigue al selector de período
+ * de arriba (Este mes / Trimestre / Semestre / Este año) — no es un
+ * control aparte.
  *
  * Sigue vigente la regla de esta página: ningún número inventado. Lo
  * que todavía no tiene dato de respaldo real (p.ej. ISR sin
@@ -306,6 +327,32 @@ export default async function AdminFinanzasPage({
   const totalCapital = aportacionesNetas + utilidadAcumulada;
   const diferenciaNoConciliada = totalActivos - totalPasivos - totalCapital;
 
+  // ---------- Flujo de caja por mes (para la gráfica de barras) ----------
+  // Reusa `compras`/`listaGastos`, que ya vienen acotados al período
+  // seleccionado — aquí solo se agrupan por mes calendario en vez de
+  // sumarse en un único total. El rango de meses sigue al selector de
+  // período de arriba (Este mes = 1 barra, Trimestre = 3, etc.).
+  const ingresosPorMes = new Map<string, number>();
+  for (const c of compras ?? []) {
+    const fecha = new Date(c.created_at);
+    const key = `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}`;
+    ingresosPorMes.set(key, (ingresosPorMes.get(key) ?? 0) + c.monto_mxn);
+  }
+  const gastosPorMesMap = new Map<string, number>();
+  for (const g of listaGastos) {
+    const fecha = new Date(`${g.fecha}T00:00:00`);
+    const key = `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}`;
+    gastosPorMesMap.set(key, (gastosPorMesMap.get(key) ?? 0) + g.monto_mxn);
+  }
+  const flujoPorMes = mesesEntre(inicioPeriodo, finPeriodo).map(({ anio, mesNum }) => {
+    const key = `${anio}-${pad(mesNum)}`;
+    return {
+      etiqueta: `${MESES_CORTO[mesNum - 1]} ${anio}`,
+      ingresos: ingresosPorMes.get(key) ?? 0,
+      gastos: gastosPorMesMap.get(key) ?? 0,
+    };
+  });
+
   const qs = (params: Record<string, string>) => {
     const merged = { vista, periodo, ...params };
     return `/admin/finanzas?${new URLSearchParams(merged).toString()}`;
@@ -427,16 +474,19 @@ export default async function AdminFinanzasPage({
       )}
 
       {vista === "flujo" && (
-        <div className="flex max-w-[700px] flex-col gap-1 rounded-card border border-line bg-surface p-6">
-          <p className="mb-2 text-[12px] font-medium uppercase tracking-[1px] text-gold">Flujo de caja</p>
-          <p className="mb-2 text-[12px] text-muted">
-            100% real: el negocio cobra al momento con Stripe, así que no hay diferencia entre devengado y efectivo que calcular aquí.
-          </p>
-          <PnlRow label="Entradas de efectivo" valor={ingresos} />
-          <PnlRow label="Salidas de efectivo" valor={-totalGastos} />
-          <PnlDiv />
-          <PnlRow label="Flujo neto del período" valor={utilidad} fuerte />
-        </div>
+        <>
+          <FlujoBarras filas={flujoPorMes} />
+          <div className="flex max-w-[700px] flex-col gap-1 rounded-card border border-line bg-surface p-6">
+            <p className="mb-2 text-[12px] font-medium uppercase tracking-[1px] text-gold">Flujo de caja — total del período</p>
+            <p className="mb-2 text-[12px] text-muted">
+              100% real: el negocio cobra al momento con Stripe, así que no hay diferencia entre devengado y efectivo que calcular aquí.
+            </p>
+            <PnlRow label="Entradas de efectivo" valor={ingresos} />
+            <PnlRow label="Salidas de efectivo" valor={-totalGastos} />
+            <PnlDiv />
+            <PnlRow label="Flujo neto del período" valor={utilidad} fuerte />
+          </div>
+        </>
       )}
 
       {vista === "indicadores" && (
@@ -761,6 +811,62 @@ function CanalesGrid({ canales }: { canales: [string, number][] }) {
           </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Gráfica de barras agrupadas (ingresos vs. gastos por mes) — CSS
+ * puro, sin librería, mismo criterio que `EstadisticaBarras`/
+ * `EstadisticaDona` en admin/Clientes. Vertical (no horizontal como
+ * las de Clientes) porque el eje natural de un flujo de caja es el
+ * tiempo, no una categoría.
+ */
+function FlujoBarras({ filas }: { filas: { etiqueta: string; ingresos: number; gastos: number }[] }) {
+  const ALTO = 160;
+  const max = Math.max(1, ...filas.flatMap((f) => [f.ingresos, f.gastos]));
+  const sinDatos = filas.every((f) => f.ingresos === 0 && f.gastos === 0);
+
+  return (
+    <div className="flex flex-col gap-4 rounded-card border border-line bg-surface px-6 py-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[13px] font-medium text-cream">Entradas vs. salidas por mes</p>
+        <div className="flex items-center gap-4 text-[11px] text-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="size-[8px] rounded-full bg-success" /> Ingresos
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-[8px] rounded-full bg-danger" /> Gastos
+          </span>
+        </div>
+      </div>
+      {sinDatos ? (
+        <p className="text-[13px] text-muted">Sin movimientos en este período.</p>
+      ) : (
+        <div className="flex items-end gap-5 overflow-x-auto pb-1">
+          {filas.map((f) => {
+            const altoIngresos = Math.max(f.ingresos > 0 ? 3 : 0, Math.round((f.ingresos / max) * ALTO));
+            const altoGastos = Math.max(f.gastos > 0 ? 3 : 0, Math.round((f.gastos / max) * ALTO));
+            return (
+              <div key={f.etiqueta} className="flex shrink-0 flex-col items-center gap-2">
+                <div className="flex items-end gap-1.5" style={{ height: ALTO }}>
+                  <div
+                    className="w-[18px] rounded-t-sm bg-success"
+                    style={{ height: altoIngresos }}
+                    title={`Ingresos ${f.etiqueta}: $${currency.format(f.ingresos)}`}
+                  />
+                  <div
+                    className="w-[18px] rounded-t-sm bg-danger"
+                    style={{ height: altoGastos }}
+                    title={`Gastos ${f.etiqueta}: $${currency.format(f.gastos)}`}
+                  />
+                </div>
+                <p className="whitespace-nowrap text-[11px] text-muted">{f.etiqueta}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
