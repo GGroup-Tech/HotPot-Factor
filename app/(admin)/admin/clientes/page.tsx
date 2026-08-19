@@ -66,19 +66,23 @@ function calcularFrecuencia(
   return totalPedidos / Math.max(1, diasActivo / 30.44);
 }
 
+// Cortes con <= arriba y "Más de N" al final (no "N+") para que no se
+// vea como si el límite se repitiera entre dos buckets — feedback del
+// usuario: "1-3" y "3+" parecían traslaparse en el 3, aunque el conteo
+// de por sí ya era exclusivo (rate<3 vs rate>=3).
 function bucketFrecuencia(rate: number, periodo: Periodo): string {
   if (rate === 0) return "Inactivo";
   if (periodo === "semana") {
     if (rate < 1) return "< 1 / semana";
-    if (rate < 3) return "1-3 / semana";
-    return "3+ / semana";
+    if (rate <= 3) return "1-3 / semana";
+    return "Más de 3 / semana";
   }
   if (rate < 4) return "< 4 / mes";
-  if (rate < 12) return "4-12 / mes";
-  return "12+ / mes";
+  if (rate <= 12) return "4-12 / mes";
+  return "Más de 12 / mes";
 }
-const ORDEN_FRECUENCIA_SEMANA = ["Inactivo", "< 1 / semana", "1-3 / semana", "3+ / semana"];
-const ORDEN_FRECUENCIA_MES = ["Inactivo", "< 4 / mes", "4-12 / mes", "12+ / mes"];
+const ORDEN_FRECUENCIA_SEMANA = ["Inactivo", "< 1 / semana", "1-3 / semana", "Más de 3 / semana"];
+const ORDEN_FRECUENCIA_MES = ["Inactivo", "< 4 / mes", "4-12 / mes", "Más de 12 / mes"];
 
 /**
  * Reemplaza "Tiempo como cliente" (antigüedad desde el registro) —
