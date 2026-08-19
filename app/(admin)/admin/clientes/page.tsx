@@ -112,6 +112,14 @@ const ORDEN_RECURRENCIA = ["Sin compras", "1 compra", "2 compras", "3-4 compras"
  * `createAdminClient()` — mismo motivo que Pedidos y A0: `requireStaff()`
  * ya verificó identidad, así que las lecturas no dependen de RLS para
  * staff (que nunca se configuró).
+ *
+ * Corregido 2026-08-19 (auditoría de Finanzas): `compras` no tiene
+ * columna `created_at` — el nombre real es `creado_en` (confirmado
+ * vía information_schema). Con el `types/database.ts` viejo esto no
+ * daba error de compilación porque el tipo también decía
+ * `created_at`, así que la consulta fallaba en silencio en
+ * PRODUCCIÓN (mismo patrón de bug que Reparto) sin que TypeScript lo
+ * marcara nunca.
  */
 export default async function AdminClientesPage({
   searchParams,
@@ -142,8 +150,8 @@ export default async function AdminClientesPage({
     admin.from("saldo_creditos").select("usuario_id, saldo"),
     admin
       .from("compras")
-      .select("usuario_id, monto_mxn, created_at, paquetes(nombre)")
-      .order("created_at", { ascending: false }),
+      .select("usuario_id, monto_mxn, creado_en, paquetes(nombre)")
+      .order("creado_en", { ascending: false }),
     admin
       .from("pedidos")
       .select("usuario_id, fecha_entrega, estado")
@@ -160,10 +168,10 @@ export default async function AdminClientesPage({
   const emailPorId = new Map((authUsers?.users ?? []).map((u) => [u.id, u.email ?? "—"]));
 
   const saldoPorUsuario = new Map((saldos ?? []).map((s) => [s.usuario_id, s.saldo]));
-  const comprasPorUsuario = new Map<string, { monto_mxn: number; created_at: string; paquete: string | null }[]>();
+  const comprasPorUsuario = new Map<string, { monto_mxn: number; creado_en: string; paquete: string | null }[]>();
   for (const c of compras ?? []) {
     const lista = comprasPorUsuario.get(c.usuario_id) ?? [];
-    lista.push({ monto_mxn: c.monto_mxn, created_at: c.created_at, paquete: (c.paquetes as unknown as { nombre: string } | null)?.nombre ?? null });
+    lista.push({ monto_mxn: c.monto_mxn, creado_en: c.creado_en, paquete: (c.paquetes as unknown as { nombre: string } | null)?.nombre ?? null });
     comprasPorUsuario.set(c.usuario_id, lista);
   }
   const pedidosPorUsuario = new Map<string, { fecha_entrega: string; estado: string }[]>();
