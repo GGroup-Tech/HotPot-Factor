@@ -120,6 +120,12 @@ export interface Database {
           foto_url: string | null;
           linea: PlatilloLinea | null;
           codigo_receta: string | null;
+          // Agregada 2026-08-20 (backlog #56, lista de compras): de
+          // cuántas porciones es el lote que describen las cantidades
+          // en `platillo_ingredientes` para este platillo. Default 10
+          // porque las 150 recetas del recetario son todas lotes de
+          // 10 — ver `migracion-rendimiento-porciones.sql`.
+          rendimiento_porciones: number;
           calorias: number | null;
           proteina_g: number | null;
           carbs_g: number | null;
