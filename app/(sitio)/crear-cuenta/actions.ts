@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hayCobertura } from "@/lib/cobertura";
+import { geocodificarDireccion, direccionParaGeocodificar } from "@/lib/geocoding";
 
 export interface CrearCuentaState {
   ok: boolean;
@@ -69,6 +70,19 @@ export async function crearCuenta(
     return { ok: false, error: signUpError ? traducirErrorAuth(signUpError.message) : "No se pudo crear la cuenta." };
   }
 
+  // Geocodificación agregada 2026-08-19 (proyecto de ruteo óptimo +
+  // WhatsApp al repartidor, Fase 1 — backlog #55). No bloqueante: sin
+  // `GOOGLE_MAPS_API_KEY` configurada, `geocodificarDireccion` regresa
+  // `null` y la cuenta se crea igual, solo sin lat/lng (esa dirección
+  // simplemente no podrá entrar en el ruteo óptimo hasta que se
+  // geocodifique, manualmente o por el backfill).
+  const direccionTexto = direccionParaGeocodificar({
+    calle_numero: calle || null,
+    colonia,
+    codigo_postal: codigoPostal || null,
+  });
+  const coords = direccionTexto ? await geocodificarDireccion(direccionTexto) : null;
+
   // Corregido 2026-08-18: esto antes usaba el cliente normal (anon +
   // sesión) con `.update()`, e IGNORABA el error si fallaba —
   // devolvía `ok: true` sin importar qué. Si Supabase Auth tiene
@@ -97,6 +111,8 @@ export async function crearCuenta(
       codigo_postal: codigoPostal || null,
       referencias: referencias || null,
       como_nos_conocio: comoNosConocio,
+      lat: coords?.lat ?? null,
+      lng: coords?.lng ?? null,
     })
     .select("id")
     .maybeSingle();
