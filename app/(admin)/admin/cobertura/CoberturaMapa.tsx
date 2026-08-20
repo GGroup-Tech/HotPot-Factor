@@ -80,7 +80,15 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
     }
     const script = document.createElement("script");
     script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&loading=async`;
+    // Sin `loading=async` a propósito: con ese parámetro Google carga
+    // el script de forma diferida y solo expone las clases de verdad
+    // (google.maps.Map, etc.) a través de `google.maps.importLibrary()`
+    // — un `script.onload` normal ya no basta para saber que
+    // `google.maps.Map` existe todavía (error real visto en producción:
+    // "t.maps.Map is not a constructor"). Sin ese parámetro, el script
+    // carga de forma clásica/síncrona y las clases están listas apenas
+    // dispara `onload`.
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
     script.async = true;
     script.onload = () => setScriptListo(true);
     document.head.appendChild(script);
