@@ -1,4 +1,4 @@
-import { comodinesDisponibles as calcComodinesDisponibles, puedeEditarPedido } from "@/lib/creditos";
+import { puedeEditarPedido } from "@/lib/creditos";
 import type { createClient } from "@/lib/supabase/server";
 
 /**
@@ -11,6 +11,12 @@ import type { createClient } from "@/lib/supabase/server";
  * de que el panel reutilice literalmente la pantalla de compra (ver
  * nota en `lib/cobertura.ts` sobre por qué la lógica duplicada es
  * peligrosa).
+ *
+ * Campo `comodinesDisponibles` de `CalendarioMes` ELIMINADO
+ * 2026-08-19: los comodines son ilimitados (confirmado explícitamente
+ * por el usuario) — no existe ningún tope que calcular o mostrar. Un
+ * comodín se puede usar cualquier día editable mientras haya crédito
+ * y algún platillo configurado como comodín ese mes.
  */
 
 export const MESES = [
@@ -58,7 +64,6 @@ export interface CalendarioMes {
   fechaPublicacion: Date;
   comodinPlatillos: PlatilloRef[];
   semanas: (DiaCeldaData | null)[][];
-  comodinesDisponibles: number;
   saldo: number;
   asignadosEsteMes: number;
   totalCreditos: number;
@@ -92,10 +97,9 @@ function fechaPublicacionMenu(anio: number, mesNum: number): Date {
 
 /**
  * Trae y arma todo lo necesario para pintar el calendario de un mes
- * para un usuario: menú fijo, comodines disponibles, pedidos ya
- * asignados, saldo y las semanas lun-vie ya construidas (con `null`
- * de relleno en los huecos). Usado tanto por `/arma-tu-mes` como por
- * `/cuenta/calendario`.
+ * para un usuario: menú fijo, pedidos ya asignados, saldo y las
+ * semanas lun-vie ya construidas (con `null` de relleno en los
+ * huecos). Usado tanto por `/arma-tu-mes` como por `/cuenta/calendario`.
  */
 export async function obtenerCalendarioMes(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -201,13 +205,6 @@ export async function obtenerCalendarioMes(
     semanas.push(semanaActual);
   }
 
-  // Cuántos comodines ya usó el usuario este mes se deriva contando
-  // sus propios pedidos con `es_comodin = true` (ya están en `pedidos`,
-  // scoped al mes y sin cancelados) — no existe ningún contador
-  // cacheado que leer, igual que el saldo de créditos se deriva de
-  // `credito_movimientos` en vez de un campo aparte.
-  const comodinesUsados = (pedidos ?? []).filter((p) => p.es_comodin).length;
-  const disponibles = calcComodinesDisponibles(comodinesUsados);
   const saldo = saldoRow?.saldo ?? 0;
   const asignadosEsteMes = pedidos?.length ?? 0;
   const totalCreditos = saldo + asignadosEsteMes;
@@ -223,7 +220,6 @@ export async function obtenerCalendarioMes(
     fechaPublicacion: fechaPublicacionMenu(anio, mesNum),
     comodinPlatillos,
     semanas,
-    comodinesDisponibles: disponibles,
     saldo,
     asignadosEsteMes,
     totalCreditos,
