@@ -17,15 +17,21 @@ import { PlatilloActivoBoton } from "./PlatilloForms";
  *
  * Esquema real de `platillos` confirmado 2026-08-13 vía
  * information_schema: id, nombre, descripcion, foto_url, calorias,
- * proteina_g, carbs_g, grasa_g, activo, creado_en.
+ * proteina_g, carbs_g, grasa_g, activo, creado_en. `linea` y
+ * `codigo_receta` agregadas 2026-08-19 al reemplazar el catálogo
+ * inventado con las 150 recetas reales del recetario.
  */
+
+const ETIQUETA_LINEA: Record<string, string> = { normal: "Normal", fit: "Fit", prime: "Prime" };
+
 export default async function AdminPlatillosPage() {
   await requireStaff();
   const admin = createAdminClient();
 
   const { data: platillosRaw } = await admin
     .from("platillos")
-    .select("id, nombre, descripcion, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, costo_mxn, activo")
+    .select("id, nombre, descripcion, linea, codigo_receta, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, costo_mxn, activo")
+    .order("linea")
     .order("nombre");
 
   const platillos = platillosRaw ?? [];
@@ -43,10 +49,11 @@ export default async function AdminPlatillosPage() {
       </div>
 
       <div className="w-full overflow-x-auto rounded-card border border-line bg-surface">
-        <table className="w-full min-w-[1180px] border-collapse text-left">
+        <table className="w-full min-w-[1280px] border-collapse text-left">
           <thead>
             <tr className="border-b border-line text-[10px] font-medium uppercase tracking-[1px] text-gold">
               <th className="px-5 py-3.5 font-medium">Nombre</th>
+              <th className="px-5 py-3.5 font-medium">Línea</th>
               <th className="px-5 py-3.5 font-medium">Descripción</th>
               <th className="px-5 py-3.5 font-medium">Nutrición</th>
               <th className="px-5 py-3.5 font-medium">Alérgenos</th>
@@ -59,14 +66,18 @@ export default async function AdminPlatillosPage() {
           <tbody>
             {platillos.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-5 py-10 text-center text-[14px] text-muted">
+                <td colSpan={9} className="px-5 py-10 text-center text-[14px] text-muted">
                   Todavía no hay platillos en el catálogo.
                 </td>
               </tr>
             ) : (
               platillos.map((p) => (
                 <tr key={p.id} className="border-b border-line text-[13px] text-cream last:border-b-0">
-                  <td className="px-5 py-3.5 font-medium">{p.nombre}</td>
+                  <td className="px-5 py-3.5 font-medium">
+                    {p.nombre}
+                    {p.codigo_receta && <span className="ml-2 text-[10px] text-muted">{p.codigo_receta}</span>}
+                  </td>
+                  <td className="px-5 py-3.5 text-muted">{p.linea ? ETIQUETA_LINEA[p.linea] ?? p.linea : "—"}</td>
                   <td className="max-w-[220px] px-5 py-3.5 text-muted">{p.descripcion ?? "—"}</td>
                   <td className="max-w-[280px] px-5 py-3.5 text-muted">
                     {p.calorias != null
