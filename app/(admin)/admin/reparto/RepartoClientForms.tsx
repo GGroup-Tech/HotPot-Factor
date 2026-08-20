@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { actualizarEstadoPedido, generarLinkConfirmacionPedido } from "../../actions";
+import { actualizarEstadoPedido, generarLinkConfirmacionDia } from "../../actions";
 import type { PedidoEstado } from "@/types/database";
 
 /**
@@ -65,14 +65,19 @@ export function EstadoPedidoBoton({ pedidoId, estado }: { pedidoId: string; esta
 
 /**
  * Puente manual mientras no está listo el envío automático por
- * WhatsApp (Fase 2, requiere Twilio) — genera el link público de
- * confirmación (`/confirmar-entrega/[token]`) y lo copia al
- * portapapeles para que el staff lo pegue a mano en el chat de
- * WhatsApp con el repartidor.
+ * WhatsApp (Fase 2, requiere Twilio) — genera UN link para TODAS las
+ * entregas del día que se está viendo en Reparto
+ * (`/confirmar-entrega/[token]`, agrupado por dirección del lado del
+ * repartidor) y lo copia al portapapeles para pegarlo a mano en el
+ * chat de WhatsApp con el repartidor.
+ *
+ * Rediseñado 2026-08-19: antes generaba un link por pedido — un solo
+ * link por día es mucho más práctico para el repartidor.
  */
-export function LinkConfirmacionBoton({ pedidoId }: { pedidoId: string }) {
+export function LinkConfirmacionDiaBoton({ fecha }: { fecha: string }) {
   const [pending, startTransition] = useTransition();
   const [estado, setEstado] = useState<"idle" | "copiado" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -81,9 +86,11 @@ export function LinkConfirmacionBoton({ pedidoId }: { pedidoId: string }) {
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            const res = await generarLinkConfirmacionPedido(pedidoId);
+            setError(null);
+            const res = await generarLinkConfirmacionDia(fecha);
             if (!res.ok || !res.url) {
               setEstado("error");
+              setError(res.error ?? "No se pudo generar el link.");
               return;
             }
             try {
@@ -91,14 +98,15 @@ export function LinkConfirmacionBoton({ pedidoId }: { pedidoId: string }) {
               setEstado("copiado");
             } catch {
               setEstado("error");
+              setError("Se generó el link pero no se pudo copiar al portapapeles.");
             }
           })
         }
-        className="text-[11px] text-muted hover:text-cream disabled:opacity-40"
+        className="btn-secondary rounded-control px-[18px] py-[10px] text-[13px] disabled:opacity-40"
       >
-        {pending ? "…" : estado === "copiado" ? "Link copiado ✓" : "Copiar link para repartidor"}
+        {pending ? "Generando…" : estado === "copiado" ? "Link del día copiado ✓" : "Copiar link del día para repartidor"}
       </button>
-      {estado === "error" && <p className="text-[11px] text-danger">No se pudo generar/copiar el link.</p>}
+      {error && <p className="text-[11px] text-danger">{error}</p>}
     </div>
   );
 }
