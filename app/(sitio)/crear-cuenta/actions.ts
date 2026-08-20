@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hayCobertura } from "@/lib/cobertura";
 import { geocodificarDireccion, direccionParaGeocodificar } from "@/lib/geocoding";
+import { hayCoberturaPorPoligono } from "@/lib/cobertura-poligono";
 
 export interface CrearCuentaState {
   ok: boolean;
@@ -52,8 +53,38 @@ export async function crearCuenta(
     return { ok: false, error: "Completa los campos obligatorios." };
   }
 
-  const { data: zonas } = await supabase.from("zonas_cobertura").select("colonia").eq("activa", true);
-  const cubierta = hayCobertura(colonia, (zonas ?? []).map((z) => z.colonia));
+  // Geocodificación agregada 2026-08-19 (proyecto de ruteo óptimo +
+  // WhatsApp al repartidor, Fase 1 — backlog #55) — se hace ANTES de
+  // decidir cobertura porque ahora esa decisión la toma el polígono
+  // real, no solo el nombre de la colonia. No bloqueante: sin
+  // `GOOGLE_MAPS_API_KEY` o si Google no encuentra la dirección,
+  // `coords` queda `null` y se usa el match de colonia como
+  // respaldo — nunca se le niega el servicio a alguien solo porque la
+  // geocodificación falló técnicamente.
+  const direccionTexto = direccionParaGeocodificar({
+    calle_numero: calle || null,
+    colonia,
+    codigo_postal: codigoPostal || null,
+  });
+  const coords = direccionTexto ? await geocodificarDireccion(direccionTexto) : null;
+
+  // Cobertura agregada 2026-08-19 (a petición del usuario): el
+  // polígono real es la decisión cuando hay coordenadas; el match de
+  // colonia (viejo comportamiento) es el respaldo si no las hay.
+  let cubierta: boolean;
+  if (coords) {
+    const { data: poligonosRaw } = await supabase
+      .from("zonas_cobertura_poligonos")
+      .select("puntos")
+      .eq("activo", true);
+    const poligonos = (poligonosRaw ?? []).map((p) => p.puntos);
+    cubierta =
+      poligonos.length > 0
+        ? hayCoberturaPorPoligono(coords, poligonos)
+        : await coberturaPorColonia(supabase, colonia);
+  } else {
+    cubierta = await coberturaPorColonia(supabase, colonia);
+  }
 
   if (!cubierta) {
     await supabase.from("lista_espera").insert({ nombre: `${nombre} ${apellido}`.trim(), email, colonia });
@@ -69,19 +100,6 @@ export async function crearCuenta(
   if (signUpError || !signUpData.user) {
     return { ok: false, error: signUpError ? traducirErrorAuth(signUpError.message) : "No se pudo crear la cuenta." };
   }
-
-  // Geocodificación agregada 2026-08-19 (proyecto de ruteo óptimo +
-  // WhatsApp al repartidor, Fase 1 — backlog #55). No bloqueante: sin
-  // `GOOGLE_MAPS_API_KEY` configurada, `geocodificarDireccion` regresa
-  // `null` y la cuenta se crea igual, solo sin lat/lng (esa dirección
-  // simplemente no podrá entrar en el ruteo óptimo hasta que se
-  // geocodifique, manualmente o por el backfill).
-  const direccionTexto = direccionParaGeocodificar({
-    calle_numero: calle || null,
-    colonia,
-    codigo_postal: codigoPostal || null,
-  });
-  const coords = direccionTexto ? await geocodificarDireccion(direccionTexto) : null;
 
   // Corregido 2026-08-18: esto antes usaba el cliente normal (anon +
   // sesión) con `.update()`, e IGNORABA el error si fallaba —
@@ -139,4 +157,12 @@ export async function crearCuenta(
   }
 
   return { ok: true, paqueteId };
+}
+
+async function coberturaPorColonia(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  colonia: string,
+): Promise<boolean> {
+  const { data: zonas } = await supabase.from("zonas_cobertura").select("colonia").eq("activa", true);
+  return hayCobertura(colonia, (zonas ?? []).map((z) => z.colonia));
 }
