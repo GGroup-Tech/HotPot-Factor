@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requireUsuario } from "@/lib/supabase/staff";
 import { createClient } from "@/lib/supabase/server";
-import { comodinesDisponibles as calcComodinesDisponibles } from "@/lib/creditos";
 
 const fechaLarga = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" });
 
@@ -12,7 +11,15 @@ function toISODate(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** 06 — Resumen / Mi cuenta. */
+/**
+ * 06 — Resumen / Mi cuenta.
+ *
+ * Tarjeta "Comodines este mes" ajustada 2026-08-19: ya no hay tope de
+ * 2/mes (confirmado por el usuario: "los comodines son ilimitados").
+ * Antes mostraba "X de 2 disponibles" usando `comodinesDisponibles()`
+ * de `lib/creditos.ts`, que ya no existe — ahora solo se muestra
+ * cuántos ha usado en el mes, sin denominador.
+ */
 export default async function CuentaPage() {
   const { user, usuario } = await requireUsuario();
   const supabase = await createClient();
@@ -42,6 +49,7 @@ export default async function CuentaPage() {
       // Igual que en lib/calendario.ts: comodines_mes es config (qué
       // platillos son comodín este anio/mes), no un contador de uso —
       // cuántos ya usó este usuario se deriva contando sus pedidos.
+      // Sin tope: solo se muestra el total usado, no un "de N".
       supabase
         .from("pedidos")
         .select("id", { count: "exact", head: true })
@@ -55,7 +63,7 @@ export default async function CuentaPage() {
 
   const platilloProximo = proximoPedido?.platillos as unknown as { nombre: string } | null;
   const saldo = saldoRow?.saldo ?? 0;
-  const disponiblesComodin = calcComodinesDisponibles(comodinesUsadosCount ?? 0);
+  const comodinesUsados = comodinesUsadosCount ?? 0;
   // Un usuario sin compras todavía es un caso distinto de uno con
   // paquete activo: mandarlo a "Armar mi mes" con 0 créditos solo lo
   // manda a un error ("No tienes créditos disponibles"). En vez de
@@ -105,8 +113,8 @@ export default async function CuentaPage() {
             />
             <TarjetaResumen
               etiqueta="Comodines este mes"
-              valor={`${disponiblesComodin} de 2`}
-              nota="Se renuevan cada mes"
+              valor={String(comodinesUsados)}
+              nota="Sin límite mensual"
               href="/cuenta/calendario"
             />
           </div>
