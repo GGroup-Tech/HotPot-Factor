@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { actualizarEstadoPedido, generarLinkConfirmacionPedido } from "../../actions";
+import type { PedidoEstado } from "@/types/database";
 
 /**
  * Botón de estado para un pedido en Reparto — mismo patrón
@@ -14,12 +15,12 @@ import { actualizarEstadoPedido, generarLinkConfirmacionPedido } from "../../act
  * medio a propósito (es una acción de todos los días, en el momento
  * de la entrega, no algo destructivo que amerite un modal).
  */
-export function EstadoPedidoBoton({ pedidoId, estado }: { pedidoId: string; estado: string }) {
+export function EstadoPedidoBoton({ pedidoId, estado }: { pedidoId: string; estado: PedidoEstado }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [estadoLocal, setEstadoLocal] = useState(estado);
 
-  function cambiar(nuevoEstado: string) {
+  function cambiar(nuevoEstado: PedidoEstado) {
     setError(null);
     startTransition(async () => {
       const res = await actualizarEstadoPedido(pedidoId, nuevoEstado);
