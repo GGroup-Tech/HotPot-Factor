@@ -39,6 +39,16 @@ function toISODate(d: Date) {
  * `payment_intent.payment_failed`), no algo que ya exista y falte
  * conectar.
  *
+ * Corregido 2026-08-19 (reporte del usuario: "ingresos no se
+ * actualizan al comprar"): las consultas a `compras` usaban
+ * `created_at`, columna que NO EXISTE — el nombre real es `creado_en`
+ * (mismo bug que ya se había corregido en Finanzas, Clientes, Mis
+ * compras y Blanca, pero se escapó en este archivo por no vivir
+ * dentro de `admin/finanzas/`). Con el nombre viejo, PostgREST
+ * rechazaba el `.select()` completo y `comprasMes`/`comprasMesPasado`
+ * siempre venían `null`, así que "Ingresos" quedaba fijo en $0 sin
+ * importar cuántas compras reales hubiera.
+ *
  * Todas las lecturas usan `createAdminClient()` (service role), no el
  * cliente normal: `requireStaff()` ya verificó arriba que quien llama
  * es staff, así que estas consultas no dependen de que existan
@@ -87,13 +97,13 @@ export default async function AdminPanelPage() {
     supabase
       .from("compras")
       .select("monto_mxn")
-      .gte("created_at", primerDiaMes.toISOString())
-      .lt("created_at", primerDiaMesSiguiente.toISOString()),
+      .gte("creado_en", primerDiaMes.toISOString())
+      .lt("creado_en", primerDiaMesSiguiente.toISOString()),
     supabase
       .from("compras")
       .select("monto_mxn")
-      .gte("created_at", primerDiaMesPasado.toISOString())
-      .lt("created_at", primerDiaMes.toISOString()),
+      .gte("creado_en", primerDiaMesPasado.toISOString())
+      .lt("creado_en", primerDiaMes.toISOString()),
     supabase.from("saldo_creditos").select("saldo"),
     supabase.from("saldo_creditos").select("usuario_id", { count: "exact", head: true }).gt("saldo", 0),
     supabase.from("paquetes").select("precio_mxn, creditos").eq("activo", true),
