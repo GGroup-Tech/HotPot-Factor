@@ -11,7 +11,6 @@ const LINKS = [
   { href: "/admin/menu", label: "Menú del mes", exact: false },
   { href: "/admin/platillos", label: "Platillos", exact: false },
   { href: "/admin/produccion", label: "Producción", exact: false },
-  { href: "/admin/compras", label: "Compras", exact: false },
   { href: "/admin/reparto", label: "Reparto", exact: false },
   { href: "/admin/cobertura", label: "Cobertura", exact: false },
   { href: "/admin/finanzas", label: "Finanzas", exact: false },
@@ -28,8 +27,11 @@ const LINKS = [
  *
  * "Cobertura" agregado 2026-08-19 — editor de mapa para los polígonos
  * de zona de cobertura (backlog #55, Fase 1).
- * "Compras" agregado 2026-08-20 — lista de compras automática a
- * partir de los ingredientes por platillo (backlog #56).
+ *
+ * La lista de compras (backlog #56) NO tiene link propio aquí — vive
+ * como pestaña dentro de "Producción" (`/admin/produccion?vista=compras`),
+ * no como sección aparte del sidebar. Ver nota completa en
+ * `app/(admin)/admin/produccion/page.tsx`.
  */
 export function AdminSidebar() {
   const pathname = usePathname();
