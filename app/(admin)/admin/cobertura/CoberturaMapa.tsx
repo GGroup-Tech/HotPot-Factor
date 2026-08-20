@@ -8,13 +8,24 @@ import { guardarPoligonoCobertura, alternarPoligonoCobertura, eliminarPoligonoCo
  * Fase "polígono de cobertura" del proyecto de ruteo óptimo (backlog
  * #55, a petición del usuario 2026-08-19).
  *
- * Usa el script de Google Maps JS directo (`<script>` + Drawing
- * Manager), SIN ningún paquete de npm nuevo — el proyecto se pega
- * archivo por archivo en GitHub, así que evitar una dependencia nueva
- * evita cualquier riesgo con package-lock.json. Por la misma razón no
- * hay `@types/google.maps` instalado: el namespace `google` se trata
- * como `any` a propósito (ver el `declare global` abajo) en vez de
- * traer tipos oficiales.
+ * REESCRITO 2026-08-19: la primera versión usaba
+ * `google.maps.drawing.DrawingManager`, pero Google la retiró por
+ * completo de la Maps JavaScript API (deprecada el 8 de agosto de
+ * 2025, eliminada en mayo de 2026 — error real en producción:
+ * "The DrawingManager functionality... is no longer available").
+ * El reemplazo que Google recomienda es una librería externa
+ * (Terra Draw), pero eso significa agregar una dependencia de npm
+ * nueva — justo lo que se evitó desde el principio por el flujo de
+ * copiar/pegar a GitHub sin `npm install` local. En vez de eso, el
+ * dibujo del polígono se hizo a mano: clic en el mapa agrega un
+ * vértice, un botón "Terminar" cierra la figura (en vez de
+ * doble-clic, que es más frágil de detectar sin la librería de
+ * drawing), y el polígono resultante queda editable (arrastra los
+ * vértices) antes de guardar.
+ *
+ * Sigue sin haber `@types/google.maps` instalado — el namespace
+ * `google` se trata como `any` a propósito (ver el `declare global`
+ * abajo) en vez de traer tipos oficiales.
  *
  * Simplificación deliberada: después de guardar/activar/eliminar una
  * zona, se recarga la página completa (`window.location.reload()`)
@@ -41,18 +52,21 @@ const CENTRO_MONTERREY = { lat: 25.6866, lng: -100.3161 };
 export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const drawingManagerRef = useRef<any>(null);
   const [scriptListo, setScriptListo] = useState(false);
   const [dibujando, setDibujando] = useState(false);
+  const [numPuntos, setNumPuntos] = useState(0);
   const [nuevoPoligono, setNuevoPoligono] = useState<{ lat: number; lng: number }[] | null>(null);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const nuevoOverlayRef = useRef<any>(null);
+  const overlayEnProgresoRef = useRef<any>(null);
+  const listenerClickRef = useRef<any>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-  // Carga el script de Google Maps una sola vez.
+  // Carga el script de Google Maps una sola vez. Ya NO se pide
+  // `libraries=drawing` — esa librería ya no existe en la API, y
+  // pedirla es justo lo que causaba el error en consola.
   useEffect(() => {
     if (!apiKey) return;
     if (window.google?.maps) {
@@ -66,7 +80,7 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
     }
     const script = document.createElement("script");
     script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=drawing`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
     script.async = true;
     script.onload = () => setScriptListo(true);
     document.head.appendChild(script);
@@ -95,50 +109,95 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
         fillOpacity: 0.15,
       });
     }
-
-    const drawingManager = new google.maps.drawing.DrawingManager({
-      drawingMode: null,
-      drawingControl: false,
-      polygonOptions: { strokeColor: "#7FB069", fillColor: "#7FB069", fillOpacity: 0.2, editable: true },
-    });
-    drawingManager.setMap(map);
-    drawingManagerRef.current = drawingManager;
-
-    google.maps.event.addListener(drawingManager, "overlaycomplete", (evento: any) => {
-      drawingManager.setDrawingMode(null);
-      setDibujando(false);
-      nuevoOverlayRef.current = evento.overlay;
-      const path = evento.overlay.getPath();
-      const puntos: { lat: number; lng: number }[] = [];
-      for (let i = 0; i < path.getLength(); i++) {
-        const punto = path.getAt(i);
-        puntos.push({ lat: punto.lat(), lng: punto.lng() });
-      }
-      setNuevoPoligono(puntos);
-    });
   }, [scriptListo, zonas]);
 
   function empezarDibujo() {
+    const google = window.google;
+    const map = mapRef.current;
+    if (!google || !map) return;
+
     setError(null);
     setNuevoPoligono(null);
     setNombreNuevo("");
     setDibujando(true);
-    drawingManagerRef.current?.setDrawingMode(window.google.maps.drawing.OverlayType.POLYGON);
+    setNumPuntos(0);
+
+    const poligono = new google.maps.Polygon({
+      map,
+      paths: [],
+      strokeColor: "#7FB069",
+      strokeOpacity: 0.9,
+      strokeWeight: 2,
+      fillColor: "#7FB069",
+      fillOpacity: 0.2,
+      editable: false,
+      clickable: false,
+    });
+    overlayEnProgresoRef.current = poligono;
+
+    listenerClickRef.current = map.addListener("click", (evento: any) => {
+      const path = poligono.getPath();
+      path.push(evento.latLng);
+      setNumPuntos(path.getLength());
+    });
+  }
+
+  function terminarDibujo() {
+    const google = window.google;
+    const poligono = overlayEnProgresoRef.current;
+    if (!poligono || !google) return;
+
+    const path = poligono.getPath();
+    if (path.getLength() < 3) {
+      setError("Dibuja al menos 3 puntos antes de terminar.");
+      return;
+    }
+
+    if (listenerClickRef.current) {
+      google.maps.event.removeListener(listenerClickRef.current);
+      listenerClickRef.current = null;
+    }
+    poligono.setOptions({ editable: true, clickable: true });
+
+    const puntos: { lat: number; lng: number }[] = [];
+    for (let i = 0; i < path.getLength(); i++) {
+      const punto = path.getAt(i);
+      puntos.push({ lat: punto.lat(), lng: punto.lng() });
+    }
+    setNuevoPoligono(puntos);
+    setDibujando(false);
   }
 
   function cancelarDibujo() {
+    const google = window.google;
+    if (listenerClickRef.current) {
+      google?.maps.event.removeListener(listenerClickRef.current);
+      listenerClickRef.current = null;
+    }
+    overlayEnProgresoRef.current?.setMap(null);
+    overlayEnProgresoRef.current = null;
     setDibujando(false);
     setNuevoPoligono(null);
-    nuevoOverlayRef.current?.setMap(null);
-    nuevoOverlayRef.current = null;
-    drawingManagerRef.current?.setDrawingMode(null);
+    setNumPuntos(0);
+    setError(null);
   }
 
   async function guardarNuevo() {
-    if (!nuevoPoligono) return;
+    const poligono = overlayEnProgresoRef.current;
+    if (!poligono) return;
+
+    // Vuelve a leer el path por si el usuario arrastró algún vértice
+    // después de darle "Terminar" (el polígono queda editable).
+    const path = poligono.getPath();
+    const puntos: { lat: number; lng: number }[] = [];
+    for (let i = 0; i < path.getLength(); i++) {
+      const punto = path.getAt(i);
+      puntos.push({ lat: punto.lat(), lng: punto.lng() });
+    }
+
     setError(null);
     setGuardando(true);
-    const res = await guardarPoligonoCobertura(null, nombreNuevo, nuevoPoligono);
+    const res = await guardarPoligonoCobertura(null, nombreNuevo, puntos);
     setGuardando(false);
     if (!res.ok) {
       setError(res.error ?? "No se pudo guardar la zona.");
@@ -165,9 +224,19 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
           {zonas.length} {zonas.length === 1 ? "zona dibujada" : "zonas dibujadas"}
         </p>
         {dibujando ? (
-          <button type="button" onClick={cancelarDibujo} className="btn-secondary rounded-control px-[18px] py-[10px] text-[13px]">
-            Cancelar dibujo
-          </button>
+          <div className="flex gap-2.5">
+            <button type="button" onClick={cancelarDibujo} className="btn-secondary rounded-control px-[18px] py-[10px] text-[13px]">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={numPuntos < 3}
+              onClick={terminarDibujo}
+              className="btn-primary rounded-control px-[18px] py-[10px] text-[13px] disabled:opacity-40"
+            >
+              Terminar ({numPuntos} {numPuntos === 1 ? "punto" : "puntos"})
+            </button>
+          </div>
         ) : (
           <button type="button" onClick={empezarDibujo} className="btn-primary rounded-control px-[18px] py-[10px] text-[13px]">
             + Nueva zona
@@ -177,16 +246,18 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
 
       <div ref={mapDivRef} className="h-[420px] w-full rounded-card border border-line" />
 
-      {dibujando && !nuevoPoligono && (
+      {dibujando && (
         <p className="text-[12px] text-muted">
-          Haz clic en el mapa para ir marcando los vértices de la zona; termina haciendo doble clic o cerrando el
-          polígono sobre el primer punto.
+          Haz clic en el mapa para ir marcando los vértices de la zona (mínimo 3). Cuando termines, dale "Terminar".
         </p>
       )}
 
       {nuevoPoligono && (
         <div className="flex w-full max-w-[420px] flex-col gap-3 rounded-card border border-line bg-surface p-5">
           <p className="text-[13px] font-medium text-cream">Nombre de la zona</p>
+          <p className="text-[12px] text-muted">
+            Puedes arrastrar los vértices del polígono en el mapa para ajustarlo antes de guardar.
+          </p>
           <input
             value={nombreNuevo}
             onChange={(e) => setNombreNuevo(e.target.value)}
@@ -209,6 +280,8 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
           {error && <p className="text-[12px] text-danger">{error}</p>}
         </div>
       )}
+
+      {dibujando && error && <p className="text-[12px] text-danger">{error}</p>}
 
       <div className="flex flex-col gap-2">
         {zonas.map((z) => (
