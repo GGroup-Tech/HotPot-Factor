@@ -23,6 +23,7 @@ const TITULOS: { href: string; titulo: string; exact: boolean }[] = [
   { href: "/admin/platillos", titulo: "Platillos", exact: false },
   { href: "/admin/produccion", titulo: "Producción", exact: false },
   { href: "/admin/reparto", titulo: "Reparto", exact: false },
+  { href: "/admin/cobertura", titulo: "Cobertura", exact: false },
   { href: "/admin/finanzas", titulo: "Finanzas", exact: false },
   { href: "/admin/cupones", titulo: "Cupones", exact: false },
 ];
@@ -38,6 +39,8 @@ function tituloDeRuta(pathname: string): string {
  * en vez de recibirse como prop, para no tener que enhebrarlo desde
  * `(admin)/layout.tsx` hasta cada página. La fecha siempre es "hoy" —
  * en el diseño original es solo contexto, no un dato de la página.
+ *
+ * "Cobertura" agregado 2026-08-19 junto con AdminSidebar.
  */
 export function AdminChrome({
   nombreStaff,
