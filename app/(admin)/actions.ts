@@ -807,3 +807,57 @@ export async function generarLinkConfirmacionDia(fecha: string): Promise<AccionA
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.hotpotfactor.com";
   return { ok: true, url: `${base}/confirmar-entrega/${token}` };
 }
+
+/**
+ * Crea o actualiza un polígono de cobertura — dibujado a mano en el
+ * editor de mapa del admin (`admin/cobertura`). `puntos` viene
+ * directo del cliente (no de un `<form>`), por eso esta acción recibe
+ * un objeto normal en vez de `FormData` — Next.js permite llamar
+ * server actions así siempre que los argumentos sean serializables.
+ *
+ * Este polígono es lo que de verdad decide cobertura al crear una
+ * cuenta (`crear-cuenta/actions.ts`) cuando la dirección se pudo
+ * geocodificar — el match por nombre de colonia (`zonas_cobertura`,
+ * tabla vieja) se queda solo como aviso instantáneo mientras el
+ * cliente escribe y como respaldo si la geocodificación falla.
+ */
+export async function guardarPoligonoCobertura(
+  id: string | null,
+  nombre: string,
+  puntos: { lat: number; lng: number }[],
+): Promise<AccionAdminResult> {
+  await requireStaff();
+  const admin = createAdminClient();
+
+  if (!nombre.trim() || puntos.length < 3) {
+    return { ok: false, error: "Dale un nombre a la zona y dibuja al menos 3 puntos." };
+  }
+
+  const { error } = id
+    ? await admin.from("zonas_cobertura_poligonos").update({ nombre, puntos }).eq("id", id)
+    : await admin.from("zonas_cobertura_poligonos").insert({ nombre, puntos, activo: true });
+
+  if (error) return { ok: false, error: "No se pudo guardar la zona." };
+  revalidatePath("/admin/cobertura");
+  return { ok: true };
+}
+
+/** Activa/desactiva un polígono sin borrarlo. */
+export async function alternarPoligonoCobertura(id: string, activo: boolean): Promise<AccionAdminResult> {
+  await requireStaff();
+  const admin = createAdminClient();
+  const { error } = await admin.from("zonas_cobertura_poligonos").update({ activo }).eq("id", id);
+  if (error) return { ok: false, error: "No se pudo actualizar la zona." };
+  revalidatePath("/admin/cobertura");
+  return { ok: true };
+}
+
+/** Elimina un polígono de cobertura (p.ej. si se dibujó por error). */
+export async function eliminarPoligonoCobertura(id: string): Promise<AccionAdminResult> {
+  await requireStaff();
+  const admin = createAdminClient();
+  const { error } = await admin.from("zonas_cobertura_poligonos").delete().eq("id", id);
+  if (error) return { ok: false, error: "No se pudo eliminar la zona." };
+  revalidatePath("/admin/cobertura");
+  return { ok: true };
+}
