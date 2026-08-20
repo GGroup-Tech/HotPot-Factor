@@ -24,6 +24,7 @@ export function puntoEnPoligono(punto: PuntoGeo, poligono: PuntoGeo[]): boolean 
   for (let i = 0, j = poligono.length - 1; i < poligono.length; j = i++) {
     const vi = poligono[i];
     const vj = poligono[j];
+    if (!vi || !vj) continue;
     const interseca =
       vi.lat > punto.lat !== vj.lat > punto.lat &&
       punto.lng < ((vj.lng - vi.lng) * (punto.lat - vi.lat)) / (vj.lat - vi.lat) + vi.lng;
