@@ -62,11 +62,7 @@ export default async function ArmaTuMesPage({
           comodinPlatillos={mesCal.comodinPlatillos}
         />
 
-        <Calendario
-          semanas={mesCal.semanas}
-          comodinesDisponibles={mesCal.comodinesDisponibles}
-          platillosComodin={mesCal.comodinPlatillos}
-        />
+        <Calendario semanas={mesCal.semanas} platillosComodin={mesCal.comodinPlatillos} />
       </main>
 
       <div className="flex w-full flex-col gap-4 border-t border-line bg-surface px-6 py-6 sm:flex-row sm:items-center sm:justify-between md:px-10 lg:px-[100px]">
