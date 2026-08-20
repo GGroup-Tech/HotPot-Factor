@@ -32,6 +32,17 @@ export const runtime = "nodejs";
  * `stripe_payment_intent_id` (columna que NO EXISTE — el nombre real
  * es `payment_ref`) y nunca mandaba `creditos`, que es NOT NULL en la
  * base real. Ese fix sigue vigente abajo.
+ *
+ * Agregado 2026-08-19 (reporte del usuario: "no estás tomando en
+ * cuenta las comisiones de Stripe"): después de otorgar los créditos,
+ * se pide a Stripe el `balance_transaction` del cargo para leer la
+ * comisión REAL que cobró (varía por tipo de tarjeta — no es un %
+ * fijo) y se guarda en `compras.comision_stripe_mxn`. Esto es
+ * deliberadamente NO bloqueante: va después de que ya se otorgaron los
+ * créditos, envuelto en su propio try/catch, y un fallo aquí (ej.
+ * Stripe tarda en calcular la comisión, o la llamada falla) solo deja
+ * esa columna en null — nunca le quita créditos al cliente ni tira la
+ * respuesta 500 que haría que Stripe reintente el evento completo.
  */
 export async function POST(request: Request) {
   if (!isStripeConfigured() || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -128,6 +139,33 @@ export async function POST(request: Request) {
   if (movError) {
     console.error("credito_movimientos insert failed", movError);
     return NextResponse.json({ error: "internal" }, { status: 500 });
+  }
+
+  // Comisión real de Stripe (no bloqueante — ver nota arriba).
+  try {
+    const chargeId =
+      typeof paymentIntent.latest_charge === "string"
+        ? paymentIntent.latest_charge
+        : paymentIntent.latest_charge?.id;
+
+    if (chargeId) {
+      const charge = await stripe.charges.retrieve(chargeId, {
+        expand: ["balance_transaction"],
+      });
+      const balanceTransaction = charge.balance_transaction;
+      if (balanceTransaction && typeof balanceTransaction !== "string") {
+        const comisionStripeMxn = balanceTransaction.fee / 100;
+        const { error: comisionError } = await admin
+          .from("compras")
+          .update({ comision_stripe_mxn: comisionStripeMxn })
+          .eq("id", compra.id);
+        if (comisionError) {
+          console.error("compras update (comision_stripe_mxn) failed", comisionError);
+        }
+      }
+    }
+  } catch (feeErr) {
+    console.error("No se pudo obtener la comisión de Stripe (no bloqueante)", feeErr);
   }
 
   return NextResponse.json({ received: true });
