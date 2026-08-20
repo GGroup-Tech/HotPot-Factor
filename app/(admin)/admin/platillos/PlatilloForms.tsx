@@ -14,6 +14,11 @@ import { crearPlatillo, actualizarPlatillo, alternarPlatilloActivo } from "../..
  * alta era un formulario metido al fondo de la lista sin un botón real
  * que llevara ahí, y no existía forma de editar un platillo ya creado
  * (solo activar/desactivar). Reportado por el usuario 2026-08-13.
+ *
+ * Campo "Línea" agregado 2026-08-19 al reemplazar el catálogo
+ * inventado con las 150 recetas reales del recetario (Normal/Fit/Prime).
+ * Se deja "Sin línea" como opción válida porque un platillo dado de
+ * alta a mano desde el panel no está obligado a pertenecer a una línea.
  */
 
 type PlatilloData = {
@@ -21,6 +26,8 @@ type PlatilloData = {
   nombre: string;
   descripcion: string | null;
   foto_url: string | null;
+  linea: "normal" | "fit" | "prime" | null;
+  codigo_receta: string | null;
   calorias: number | null;
   proteina_g: number | null;
   carbs_g: number | null;
@@ -32,6 +39,17 @@ type PlatilloData = {
   costo_mxn: number | null;
   activo: boolean;
 };
+
+function SelectLinea({ defaultValue }: { defaultValue?: string | null }) {
+  return (
+    <select name="linea" defaultValue={defaultValue ?? ""} className="input">
+      <option value="">Sin línea</option>
+      <option value="normal">Normal</option>
+      <option value="fit">Fit</option>
+      <option value="prime">Prime</option>
+    </select>
+  );
+}
 
 export function CrearPlatilloForm() {
   const router = useRouter();
@@ -56,6 +74,9 @@ export function CrearPlatilloForm() {
       </Campo>
       <Campo label="Descripción (opcional)">
         <input name="descripcion" placeholder="Pechuga a la plancha, arroz integral y verduras salteadas" className="input" />
+      </Campo>
+      <Campo label="Línea">
+        <SelectLinea />
       </Campo>
       <Campo label="Foto (opcional, PNG o JPEG)">
         <input name="foto" type="file" accept="image/png,image/jpeg" className="input" />
@@ -123,6 +144,12 @@ export function EditarPlatilloForm({ platillo }: { platillo: PlatilloData }) {
       <Campo label="Descripción (opcional)">
         <input name="descripcion" defaultValue={platillo.descripcion ?? ""} className="input" />
       </Campo>
+      <Campo label="Línea">
+        <SelectLinea defaultValue={platillo.linea} />
+      </Campo>
+      {platillo.codigo_receta && (
+        <p className="text-[11px] text-muted">Código de receta original: {platillo.codigo_receta}</p>
+      )}
       {platillo.foto_url && (
         <img src={platillo.foto_url} alt={platillo.nombre} className="h-28 w-28 rounded-control object-cover" />
       )}
