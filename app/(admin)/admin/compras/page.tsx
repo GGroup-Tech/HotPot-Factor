@@ -87,6 +87,12 @@ export default async function AdminComprasPage({
   for (const fila of ingredientesRaw ?? []) {
     const info = pedidosPorPlatillo.get(fila.platillo_id);
     if (!info) continue;
+    // `cantidad`/`unidad` son NOT NULL en la base real (ver
+    // `migracion-platillo-ingredientes.sql`), pero el tipo generado en
+    // types/database.ts los marca nullable a propósito (mismo patrón
+    // defensivo que el resto del proyecto) — se descarta cualquier fila
+    // que de todos modos venga incompleta en vez de tronar el build.
+    if (fila.cantidad == null || !fila.unidad) continue;
     platillosConIngredientes.add(fila.platillo_id);
     const cantidadPorPedido = fila.cantidad / info.rendimiento;
     const cantidadTotal = cantidadPorPedido * info.cantidad;
