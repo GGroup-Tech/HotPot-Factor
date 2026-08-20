@@ -80,7 +80,7 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
     }
     const script = document.createElement("script");
     script.id = "google-maps-script";
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&loading=async`;
     script.async = true;
     script.onload = () => setScriptListo(true);
     document.head.appendChild(script);
@@ -124,7 +124,12 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
 
     const poligono = new google.maps.Polygon({
       map,
-      paths: [],
+      // `[[]]` = un anillo, vacío — NO `[]` a secas. Con `[]` la API no
+      // puede distinguir "un anillo vacío" de "cero anillos" y elige lo
+      // segundo, así que `getPath()` regresa `undefined` y el primer
+      // `.push()` revienta con "Cannot read properties of undefined"
+      // (error real visto en producción 2026-08-19).
+      paths: [[]],
       strokeColor: "#7FB069",
       strokeOpacity: 0.9,
       strokeWeight: 2,
