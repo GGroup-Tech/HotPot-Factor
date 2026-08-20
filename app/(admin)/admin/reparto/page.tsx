@@ -2,6 +2,7 @@ import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ImprimirButton } from "@/app/components/admin/ImprimirButton";
 import { ExportarCsvButton } from "@/app/components/admin/ExportarCsvButton";
+import { EstadoPedidoBoton, LinkConfirmacionBoton } from "./RepartoClientForms";
 
 const fechaLarga = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" });
 
@@ -29,6 +30,15 @@ const ESTADO_INFO: Record<string, { label: string; color: string }> = {
  * columna inexistente, así que PostgREST rechazaba la consulta
  * COMPLETA en silencio y la pantalla siempre mostraba "sin entregas",
  * sin importar cuántos pedidos reales hubiera ese día.
+ *
+ * Corregido 2026-08-19 (el usuario preguntó "cómo se le cambia el
+ * estatus de un pedido de programado a entregado" — no había forma):
+ * la columna "Estado" ya no es una pill estática, es
+ * `EstadoPedidoBoton`, que sí puede escribir `pedidos.estado` (ver
+ * `actualizarEstadoPedido` en `(admin)/actions.ts`). Esto no es solo
+ * cosmético — "Costo de producción" e "Ingreso por porción" en
+ * Finanzas dependen de `estado = 'entregado'`, así que sin este botón
+ * esos números se quedaban en $0 para siempre.
  */
 export default async function AdminRepartoPage({
   searchParams,
@@ -165,31 +175,21 @@ export default async function AdminRepartoPage({
                 </td>
               </tr>
             ) : (
-              pedidos.map((p, i) => {
-                const info = ESTADO_INFO[p.estado] ?? { label: p.estado, color: "muted" };
-                return (
-                  <tr key={p.id} className="border-b border-line text-[13px] text-cream last:border-b-0">
-                    <td className="px-5 py-3.5 text-muted">{String(i + 1).padStart(3, "0")}</td>
-                    <td className="px-5 py-3.5">{p.usuarios?.colonia ?? "—"}</td>
-                    <td className="px-5 py-3.5">{direccionCompleta(p) ?? "—"}</td>
-                    <td className="px-5 py-3.5">{p.usuarios?.nombre ?? "—"}</td>
-                    <td className="px-5 py-3.5">{p.platillos?.nombre ?? "—"}</td>
-                    <td className="px-5 py-3.5">
-                      <span
-                        className={`pill border ${
-                          info.color === "success"
-                            ? "border-success text-success"
-                            : info.color === "danger"
-                              ? "border-danger text-danger"
-                              : "border-line text-muted"
-                        }`}
-                      >
-                        {info.label}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })
+              pedidos.map((p, i) => (
+                <tr key={p.id} className="border-b border-line text-[13px] text-cream last:border-b-0">
+                  <td className="px-5 py-3.5 text-muted">{String(i + 1).padStart(3, "0")}</td>
+                  <td className="px-5 py-3.5">{p.usuarios?.colonia ?? "—"}</td>
+                  <td className="px-5 py-3.5">{direccionCompleta(p) ?? "—"}</td>
+                  <td className="px-5 py-3.5">{p.usuarios?.nombre ?? "—"}</td>
+                  <td className="px-5 py-3.5">{p.platillos?.nombre ?? "—"}</td>
+                  <td className="px-5 py-3.5 text-right">
+                    <div className="flex flex-col items-end gap-1.5">
+                      <EstadoPedidoBoton pedidoId={p.id} estado={p.estado} />
+                      <LinkConfirmacionBoton pedidoId={p.id} />
+                    </div>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
