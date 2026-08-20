@@ -22,6 +22,7 @@
 
 export type PedidoEstado = "programado" | "en_produccion" | "entregado" | "cancelado";
 export type StaffRol = "admin" | "operaciones" | "reparto";
+export type PlatilloLinea = "normal" | "fit" | "prime";
 export type MovimientoTipo =
   | "compra"
   | "asignacion"
@@ -103,11 +104,22 @@ export interface Database {
         // Nombres reales: `foto_url` (no `imagen_url`), `calorias` (no
         // `kcal`), `carbs_g` (no `carbohidratos_g`). Las columnas
         // `categoria`, `etiqueta` y `disponible_comodin` NO EXISTEN.
+        //
+        // `linea` y `codigo_receta` agregadas 2026-08-19 al reemplazar
+        // los platillos inventados por las 150 recetas reales del
+        // recetario del chef — ver migración `migracion-platillos-recetario.sql`.
+        // `linea` es texto libre con CHECK ('normal'|'fit'|'prime'),
+        // nullable porque un platillo dado de alta a mano desde el panel
+        // (no importado del recetario) no está obligado a tener línea.
+        // `codigo_receta` es solo trazabilidad hacia la ficha técnica
+        // original (p.ej. "COM-N-001") — no se usa en ninguna lógica.
         Row: {
           id: string;
           nombre: string;
           descripcion: string | null;
           foto_url: string | null;
+          linea: PlatilloLinea | null;
+          codigo_receta: string | null;
           calorias: number | null;
           proteina_g: number | null;
           carbs_g: number | null;
