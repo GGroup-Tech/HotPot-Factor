@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/admin/platillos", label: "Platillos", exact: false },
   { href: "/admin/produccion", label: "Producción", exact: false },
   { href: "/admin/reparto", label: "Reparto", exact: false },
+  { href: "/admin/cobertura", label: "Cobertura", exact: false },
   { href: "/admin/finanzas", label: "Finanzas", exact: false },
   { href: "/admin/cupones", label: "Cupones", exact: false },
 ];
@@ -23,6 +24,9 @@ const LINKS = [
  * fija en todos los tamaños por ahora — la pasada de responsive del
  * panel admin queda para cuando se construyan las pantallas móviles
  * (Fase 4) o si el cliente pide usarlo desde tablet/celular antes.
+ *
+ * "Cobertura" agregado 2026-08-19 — editor de mapa para los polígonos
+ * de zona de cobertura (backlog #55, Fase 1).
  */
 export function AdminSidebar() {
   const pathname = usePathname();
