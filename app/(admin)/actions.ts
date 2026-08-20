@@ -362,6 +362,7 @@ export async function crearPlatillo(formData: FormData): Promise<AccionAdminResu
   const sodioStr = String(formData.get("sodio_mg") ?? "");
   const alergenos = String(formData.get("alergenos") ?? "").trim() || null;
   const costoStr = String(formData.get("costo_mxn") ?? "");
+  const rendimientoStr = String(formData.get("rendimiento_porciones") ?? "");
 
   if (!nombre) return { ok: false, error: "El nombre es obligatorio." };
 
@@ -375,12 +376,17 @@ export async function crearPlatillo(formData: FormData): Promise<AccionAdminResu
 
   const aEntero = (s: string) => (s.trim() === "" ? null : Number.isFinite(Number(s)) ? Math.round(Number(s)) : null);
   const aDecimal = (s: string) => (s.trim() === "" ? null : Number.isFinite(Number(s)) ? Number(s) : null);
+  // `rendimiento_porciones` es NOT NULL con DEFAULT 10 en la base — si
+  // el campo viene vacío u ovalido, se omite del insert para que la
+  // base use su default en vez de mandar `null` (que violaría NOT NULL).
+  const rendimientoEntero = aEntero(rendimientoStr);
 
   const { error } = await admin.from("platillos").insert({
     nombre,
     descripcion,
     linea,
     foto_url: fotoUrl,
+    ...(rendimientoEntero != null && rendimientoEntero > 0 ? { rendimiento_porciones: rendimientoEntero } : {}),
     calorias: aEntero(caloriasStr),
     proteina_g: aEntero(proteinaStr),
     carbs_g: aEntero(carbsStr),
@@ -422,6 +428,7 @@ export async function actualizarPlatillo(platilloId: string, formData: FormData)
   const sodioStr = String(formData.get("sodio_mg") ?? "");
   const alergenos = String(formData.get("alergenos") ?? "").trim() || null;
   const costoStr = String(formData.get("costo_mxn") ?? "");
+  const rendimientoStr = String(formData.get("rendimiento_porciones") ?? "");
   const activo = formData.get("activo") === "on";
 
   if (!nombre) return { ok: false, error: "El nombre es obligatorio." };
@@ -436,6 +443,7 @@ export async function actualizarPlatillo(platilloId: string, formData: FormData)
 
   const aEntero = (s: string) => (s.trim() === "" ? null : Number.isFinite(Number(s)) ? Math.round(Number(s)) : null);
   const aDecimal = (s: string) => (s.trim() === "" ? null : Number.isFinite(Number(s)) ? Number(s) : null);
+  const rendimientoEntero = aEntero(rendimientoStr) ?? 10;
 
   const { error } = await admin
     .from("platillos")
@@ -444,6 +452,7 @@ export async function actualizarPlatillo(platilloId: string, formData: FormData)
       descripcion,
       linea,
       foto_url: fotoUrl,
+      rendimiento_porciones: rendimientoEntero > 0 ? rendimientoEntero : 10,
       calorias: aEntero(caloriasStr),
       proteina_g: aEntero(proteinaStr),
       carbs_g: aEntero(carbsStr),
