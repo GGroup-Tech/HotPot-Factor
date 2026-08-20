@@ -4,10 +4,17 @@
  * ninguna ruta, acción de servidor, ni override de admin que salte
  * `puedeEditarPedido`. El texto del brief es explícito: "sin
  * excepciones de código".
+ *
+ * `COMODINES_POR_MES` / `comodinesDisponibles()` — ELIMINADAS
+ * 2026-08-19. Se habían agregado un límite de 2 comodines/mes que
+ * nunca existió como regla real del negocio: el usuario confirmó
+ * explícitamente "los comodines son ilimitados, no tienen límite
+ * para escogerlos". Un comodín solo se limita por lo mismo que
+ * cualquier otro día del calendario: tener crédito disponible y que
+ * el día siga fuera de las 48h de corte — no hay tope aparte.
  */
 
 export const HORAS_CORTE_EDICION = 48;
-export const COMODINES_POR_MES = 2;
 
 /**
  * Un pedido se puede editar/cancelar solo si faltan más de 48h para
@@ -29,10 +36,6 @@ export function puedeEditarPedido(fechaEntrega: Date, ahora: Date = new Date()):
  */
 export function calcularSaldo(movimientos: { cantidad: number }[]): number {
   return movimientos.reduce((acc, m) => acc + m.cantidad, 0);
-}
-
-export function comodinesDisponibles(usadosEsteMes: number): number {
-  return Math.max(0, COMODINES_POR_MES - usadosEsteMes);
 }
 
 /** El menú del mes N se publica el día 20 del mes N-1. */
