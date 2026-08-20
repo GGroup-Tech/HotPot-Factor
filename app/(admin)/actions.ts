@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStaff } from "@/lib/supabase/staff";
 import type { PedidoEstado, PlatilloLinea } from "@/types/database";
+import { generarPropuestaMenu, type CandidatoMenu } from "@/lib/menu-optimo";
 
 const LINEAS_VALIDAS: PlatilloLinea[] = ["normal", "fit", "prime"];
 function aLinea(s: string): PlatilloLinea | null {
@@ -868,5 +869,113 @@ export async function eliminarPoligonoCobertura(id: string): Promise<AccionAdmin
   const { error } = await admin.from("zonas_cobertura_poligonos").delete().eq("id", id);
   if (error) return { ok: false, error: "No se pudo eliminar la zona." };
   revalidatePath("/admin/cobertura");
+  return { ok: true };
+}
+
+/**
+ * Genera automáticamente el menú fijo (5 días) y los comodines de un
+ * mes (backlog #62, 2026-08-19) — algoritmo puro en `lib/menu-optimo.ts`,
+ * esta acción solo arma los datos de entrada y guarda el resultado.
+ *
+ * Reglas confirmadas con el usuario: no repetir un platillo (ni en
+ * menú fijo ni en comodines — ambos los define el restaurante) hasta
+ * agotar el catálogo completo, y dentro de lo que se pueda elegir en
+ * un momento dado, minimizar traslape de ingredientes entre los
+ * platillos elegidos ese mes.
+ *
+ * Se niega a correr sobre un mes ya publicado — cambiar el menú
+ * después de publicado podría alterar lo que un cliente ya vio y
+ * eligió; para eso existe la edición manual día por día que ya
+ * existía (`actualizarMenuDia`).
+ *
+ * Si `platillo_ingredientes` todavía no tiene datos (migración no
+ * corrida), el criterio de variedad simplemente no tiene efecto —
+ * todos los platillos quedan con ingredientes vacíos y el algoritmo
+ * cae de lleno en "no repetir", sin tronar.
+ */
+export async function generarMenuOptimo(anio: number, mes: number, numComodines: number): Promise<AccionAdminResult> {
+  await requireStaff();
+  const admin = createAdminClient();
+
+  if (!Number.isFinite(numComodines) || numComodines < 0) {
+    return { ok: false, error: "Número de comodines inválido." };
+  }
+
+  const { data: yaPublicado } = await admin
+    .from("menu_mes")
+    .select("id")
+    .eq("anio", anio)
+    .eq("mes", mes)
+    .eq("publicado", true)
+    .limit(1)
+    .maybeSingle();
+  if (yaPublicado) {
+    return { ok: false, error: "Este mes ya está publicado — edita los días a mano si quieres cambiarlo." };
+  }
+
+  const [{ data: platillos }, { data: ingredientesRaw }, { data: historialMenu }, { data: historialComodines }] =
+    await Promise.all([
+      admin.from("platillos").select("id, nombre").eq("activo", true),
+      admin.from("platillo_ingredientes").select("platillo_id, producto"),
+      admin.from("menu_mes").select("anio, mes, platillo_id"),
+      admin.from("comodines_mes").select("anio, mes, platillo_id"),
+    ]);
+
+  if (!platillos || platillos.length === 0) {
+    return { ok: false, error: "No hay platillos activos en el catálogo." };
+  }
+
+  const totalSlots = 5 + numComodines;
+  if (platillos.length < totalSlots) {
+    return {
+      ok: false,
+      error: `Necesitas al menos ${totalSlots} platillos activos (5 del menú fijo + ${numComodines} comodines) y solo hay ${platillos.length}.`,
+    };
+  }
+
+  const ingredientesPorPlatillo = new Map<string, Set<string>>();
+  for (const fila of ingredientesRaw ?? []) {
+    const set = ingredientesPorPlatillo.get(fila.platillo_id) ?? new Set<string>();
+    set.add(fila.producto.trim().toLowerCase());
+    ingredientesPorPlatillo.set(fila.platillo_id, set);
+  }
+
+  // "Último uso" en meses reales (anio*12+mes) contando TANTO menú
+  // fijo como comodines — el más reciente de los dos gana.
+  const ultimoUsoPorPlatillo = new Map<string, number>();
+  const registrar = (platilloId: string | null, anioUso: number, mesUso: number) => {
+    if (!platilloId) return;
+    const clave = anioUso * 12 + mesUso;
+    const actual = ultimoUsoPorPlatillo.get(platilloId);
+    if (actual === undefined || clave > actual) ultimoUsoPorPlatillo.set(platilloId, clave);
+  };
+  for (const f of historialMenu ?? []) registrar(f.platillo_id, f.anio, f.mes);
+  for (const f of historialComodines ?? []) registrar(f.platillo_id, f.anio, f.mes);
+
+  const candidatos: CandidatoMenu[] = platillos.map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    ingredientes: ingredientesPorPlatillo.get(p.id) ?? new Set<string>(),
+    ultimoUso: ultimoUsoPorPlatillo.get(p.id) ?? -Infinity,
+  }));
+
+  const propuesta = generarPropuestaMenu(candidatos, totalSlots);
+  const menuFijo = propuesta.slice(0, 5);
+  const comodines = propuesta.slice(5);
+
+  const filasMenu = menuFijo.map((p, i) => ({ anio, mes, dia_semana: i + 1, platillo_id: p.id }));
+  const { error: menuError } = await admin.from("menu_mes").upsert(filasMenu, { onConflict: "anio,mes,dia_semana" });
+  if (menuError) return { ok: false, error: "No se pudo guardar el menú fijo generado." };
+
+  const { error: borrarError } = await admin.from("comodines_mes").delete().eq("anio", anio).eq("mes", mes);
+  if (borrarError) return { ok: false, error: "No se pudo limpiar los comodines anteriores." };
+
+  if (comodines.length > 0) {
+    const filasComodines = comodines.map((p) => ({ anio, mes, platillo_id: p.id }));
+    const { error: comodinesError } = await admin.from("comodines_mes").insert(filasComodines);
+    if (comodinesError) return { ok: false, error: "No se pudo guardar los comodines generados." };
+  }
+
+  revalidatePath("/admin/menu");
   return { ok: true };
 }
