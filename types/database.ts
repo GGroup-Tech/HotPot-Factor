@@ -263,11 +263,12 @@ export interface Database {
       // no `created_at`/`updated_at`. `corte_edicion` es NOT NULL.
       // `token_confirmacion`/`token_expira_en` agregadas 2026-08-19 para
       // el proyecto de ruteo óptimo + WhatsApp al repartidor (backlog
-      // #55, Fase 1) — requiere correr la migración `alter table
-      // pedidos add column token_confirmacion text unique, add column
-      // token_expira_en timestamptz;` antes de que este tipo calce con
-      // la base real. El repartidor confirma la entrega tocando un link
-      // con este token, sin necesitar cuenta de staff.
+      // #55, Fase 1) — ver migración en el mensaje de entrega de estos
+      // archivos. IMPORTANTE: `token_confirmacion` NO es UNIQUE — un
+      // mismo token se repite en varias filas a propósito (un solo
+      // link cubre todas las entregas de un día). El repartidor
+      // confirma tocando un link con este token, sin necesitar cuenta
+      // de staff.
       pedidos: {
         // UNIQUE(usuario_id, fecha_entrega)
         Row: {
