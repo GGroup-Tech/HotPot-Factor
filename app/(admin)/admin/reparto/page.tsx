@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ImprimirButton } from "@/app/components/admin/ImprimirButton";
 import { ExportarCsvButton } from "@/app/components/admin/ExportarCsvButton";
 import { EstadoPedidoBoton, LinkConfirmacionBoton } from "./RepartoClientForms";
+import type { PedidoEstado } from "@/types/database";
 
 const fechaLarga = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" });
 
@@ -75,7 +76,7 @@ export default async function AdminRepartoPage({
 
   type Fila = {
     id: string;
-    estado: string;
+    estado: PedidoEstado;
     platillos: { nombre: string } | null;
     usuarios: { nombre: string; colonia: string | null; calle_numero: string | null; codigo_postal: string | null } | null;
   };
