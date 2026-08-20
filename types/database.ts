@@ -136,6 +136,40 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["platillos"]["Row"]>;
         Relationships: [];
       };
+      // Tabla nueva 2026-08-19 (backlog #56/#70) — ingredientes por
+      // platillo, cargados desde el recetario del chef vía
+      // `migracion-platillo-ingredientes.sql`. `cantidad` es numeric en
+      // la base (puede traer decimales, p.ej. "1.5 kg"), por eso es
+      // `number` y no un entero. La usa el algoritmo de menú óptimo
+      // (`lib/menu-optimo.ts`, vía `generarMenuOptimo`) para medir
+      // traslape de ingredientes entre platillos, y más adelante la
+      // lista de compras (#56) para sumar cantidades por platillo del
+      // mes.
+      platillo_ingredientes: {
+        Row: {
+          id: string;
+          platillo_id: string;
+          producto: string;
+          unidad: string | null;
+          cantidad: number | null;
+          especificacion: string | null;
+          creado_en: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["platillo_ingredientes"]["Row"]> & {
+          platillo_id: string;
+          producto: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["platillo_ingredientes"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "platillo_ingredientes_platillo_id_fkey";
+            columns: ["platillo_id"];
+            isOneToOne: false;
+            referencedRelation: "platillos";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       // Esquema confirmado 2026-08-13 — `menu_mes`/`comodines_mes`/
       // `meses_contables` usan `anio` + `mes` como columnas INTEGER
       // separadas, no un solo campo de fecha. Sufijo `_en` para
