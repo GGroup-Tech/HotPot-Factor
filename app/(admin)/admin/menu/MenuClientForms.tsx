@@ -9,6 +9,7 @@ import {
   copiarMenuMesPasado,
   publicarMenu,
   crearPlatillo,
+  generarMenuOptimo,
 } from "../../actions";
 
 /**
@@ -26,6 +27,13 @@ import {
  * `app/components/calendario/DiaCelda.tsx`: ahora cualquier error se
  * muestra en pantalla en vez de fallar en silencio, y hay un estado
  * de "Guardando…" visible mientras se procesa.
+ *
+ * `GenerarMenuBoton` agregado 2026-08-19 (backlog #62) — dispara el
+ * algoritmo de menú óptimo para el mes actual, con
+ * `router.refresh()` explícito porque, a diferencia de los demás
+ * botones de esta pantalla, este puede reescribir MUCHAS filas de una
+ * sola vez (menú fijo completo + todos los comodines) y conviene
+ * confirmar visualmente que sí se refrescó todo, no solo un campo.
  */
 
 type Platillo = { id: string; nombre: string };
@@ -326,6 +334,59 @@ export function AccionMenuBoton({
         {pending ? pendingLabel : label}
       </button>
       {error && <p className="max-w-[220px] text-right text-[11px] text-danger">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * "Generar automáticamente" — corre el algoritmo de menú óptimo
+ * (backlog #62) para este anio/mes: arma los 5 días del menú fijo y
+ * la cantidad de comodines que el staff indique, sin repetir ningún
+ * platillo hasta agotar el catálogo y minimizando traslape de
+ * ingredientes. Solo PROPONE — no publica; el staff revisa el
+ * resultado en esta misma pantalla (ya renderizado con lo generado) y
+ * le da "Publicar menú" cuando esté conforme, o ajusta un día a mano
+ * con el selector normal.
+ */
+export function GenerarMenuBoton({ anio, mesNum }: { anio: number; mesNum: number }) {
+  const router = useRouter();
+  const [numComodines, setNumComodines] = useState(5);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function onGenerar() {
+    setError(null);
+    startTransition(async () => {
+      const res = await generarMenuOptimo(anio, mesNum, numComodines);
+      if (!res.ok) setError(res.error ?? "No se pudo generar el menú.");
+      else router.refresh();
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-1.5 text-[12px] text-muted">
+          Comodines
+          <input
+            type="number"
+            min={0}
+            max={50}
+            value={numComodines}
+            onChange={(e) => setNumComodines(Math.max(0, Number(e.target.value)))}
+            className="w-[56px] rounded-control border border-line bg-ink px-2 py-1.5 text-[12px] text-cream"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={onGenerar}
+          className="btn-secondary rounded-control px-4 py-2.5 text-[13px] disabled:opacity-40"
+        >
+          {pending ? "Generando…" : "Generar automáticamente"}
+        </button>
+      </div>
+      {error && <p className="max-w-[280px] text-right text-[11px] text-danger">{error}</p>}
     </div>
   );
 }
