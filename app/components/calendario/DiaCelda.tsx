@@ -7,13 +7,17 @@ import { asignarPedido, cancelarPedido, editarPedido } from "./actions";
 
 export type { DiaCeldaData };
 
+/**
+ * Prop `comodinesDisponibles` ELIMINADO 2026-08-19 junto con el tope
+ * de 2 comodines/mes — los comodines son ilimitados. `hayComodinesUsables`
+ * ahora solo depende de que existan platillos configurados como
+ * comodín ese mes.
+ */
 export function DiaCelda({
   dia,
-  comodinesDisponibles,
   platillosComodin,
 }: {
   dia: DiaCeldaData;
-  comodinesDisponibles: number;
   platillosComodin: { id: string; nombre: string }[];
 }) {
   const [menuAbierto, setMenuAbierto] = useState(false);
@@ -21,7 +25,7 @@ export function DiaCelda({
   const [error, setError] = useState<string | null>(null);
 
   const asignado = Boolean(dia.pedido);
-  const hayComodinesUsables = comodinesDisponibles > 0 && platillosComodin.length > 0;
+  const hayComodinesUsables = platillosComodin.length > 0;
   // Día editable (fuera de las 48h de corte) pero sin nada que asignar
   // todavía: ni menú fijo publicado para ese día de la semana, ni
   // comodines disponibles. Antes esto se veía igual que un día vacío
@@ -130,7 +134,7 @@ export function DiaCelda({
           )}
           {!asignado && hayComodinesUsables && (
             <div className="mt-2 flex flex-col gap-1.5">
-              <p className="text-[11px] text-muted">O usa un comodín ({comodinesDisponibles} disponibles):</p>
+              <p className="text-[11px] text-muted">O usa un comodín:</p>
               {platillosComodin.map((p) => (
                 <button
                   key={p.id}
