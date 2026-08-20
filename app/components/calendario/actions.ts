@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireUsuario } from "@/lib/supabase/staff";
 import { toISODate } from "@/lib/calendario";
-import { puedeEditarPedido, COMODINES_POR_MES, HORAS_CORTE_EDICION } from "@/lib/creditos";
+import { puedeEditarPedido, HORAS_CORTE_EDICION } from "@/lib/creditos";
 
 export interface AccionPedidoResult {
   ok: boolean;
@@ -27,38 +27,6 @@ function anioMesDeFecha(fecha: Date): { anio: number; mes: number } {
 function revalidarCalendario() {
   revalidatePath("/arma-tu-mes");
   revalidatePath("/cuenta/calendario");
-}
-
-/**
- * `comodines_mes` NO es un contador de uso por usuario — es config de
- * qué platillos son válidos como comodín en un anio/mes (confirmado
- * contra el esquema real 2026-08-13: id, anio, mes, platillo_id,
- * creado_en — sin usuario_id ni "usados"). Cuántos comodines ya usó
- * un usuario este mes se deriva contando sus propios `pedidos` con
- * `es_comodin = true`, igual que el saldo de créditos se deriva de
- * `credito_movimientos` — nunca un contador cacheado que se pueda
- * desincronizar.
- */
-async function contarComodinesUsados(
-  supabase: SupabaseServerClient,
-  usuarioId: string,
-  anio: number,
-  mes: number,
-  excluirPedidoId?: string,
-): Promise<number> {
-  const primerDia = new Date(anio, mes - 1, 1);
-  const ultimoDia = new Date(anio, mes, 0);
-  let query = supabase
-    .from("pedidos")
-    .select("id", { count: "exact", head: true })
-    .eq("usuario_id", usuarioId)
-    .eq("es_comodin", true)
-    .neq("estado", "cancelado")
-    .gte("fecha_entrega", toISODate(primerDia))
-    .lte("fecha_entrega", toISODate(ultimoDia));
-  if (excluirPedidoId) query = query.neq("id", excluirPedidoId);
-  const { count } = await query;
-  return count ?? 0;
 }
 
 /** true si `platilloId` está configurado como comodín válido ese anio/mes. */
@@ -84,6 +52,12 @@ async function esComodinValido(
  * pedido recién creado. `pedidos` tiene UNIQUE(usuario_id,
  * fecha_entrega) así que un doble submit falla limpio en vez de
  * duplicar la entrega.
+ *
+ * Ya NO hay límite mensual de comodines — eliminado 2026-08-19
+ * (confirmado explícitamente por el usuario: "los comodines son
+ * ilimitados, no tienen límite para escogerlos"). El único freno para
+ * usar un comodín es el mismo que para cualquier día: tener crédito y
+ * que la fecha siga fuera de las 48h de corte.
  */
 export async function asignarPedido(
   fechaEntrega: string,
@@ -109,10 +83,6 @@ export async function asignarPedido(
     const valido = await esComodinValido(supabase, platilloId, anio, mes);
     if (!valido) {
       return { ok: false, error: "Ese platillo no está disponible como comodín este mes." };
-    }
-    const usados = await contarComodinesUsados(supabase, user.id, anio, mes);
-    if (usados >= COMODINES_POR_MES) {
-      return { ok: false, error: "Ya usaste tus 2 comodines de este mes." };
     }
   }
 
@@ -205,9 +175,7 @@ export async function asignarPedido(
  * Cancela una entrega dentro del plazo. El crédito regresa libre al
  * saldo (regla invariante) vía un movimiento +1 — nunca se edita el
  * movimiento de consumo original porque `credito_movimientos` es
- * append-only. Si era comodín, no hace falta "liberarlo" en ningún
- * lado: el conteo de comodines usados se deriva de `pedidos` sin
- * cancelar, así que cancelar este ya lo saca de la cuenta.
+ * append-only.
  */
 export async function cancelarPedido(pedidoId: string): Promise<AccionPedidoResult> {
   const { user } = await requireUsuario();
@@ -255,9 +223,7 @@ export async function cancelarPedido(pedidoId: string): Promise<AccionPedidoResu
 /**
  * Cambia el platillo (o el estatus de comodín) de una entrega ya
  * asignada, sin tocar el saldo de créditos — el crédito ya se cobró
- * al asignar. Si el cambio cruza la frontera platillo fijo → comodín,
- * sí revalida el límite de 2/mes (excluyendo este mismo pedido del
- * conteo, porque todavía no es comodín en la fila actual).
+ * al asignar.
  */
 export async function editarPedido(
   pedidoId: string,
@@ -282,10 +248,6 @@ export async function editarPedido(
     const valido = await esComodinValido(supabase, nuevoPlatilloId, anio, mes);
     if (!valido) {
       return { ok: false, error: "Ese platillo no está disponible como comodín este mes." };
-    }
-    const usados = await contarComodinesUsados(supabase, user.id, anio, mes, pedidoId);
-    if (usados >= COMODINES_POR_MES) {
-      return { ok: false, error: "Ya usaste tus 2 comodines de este mes." };
     }
   }
   const { data: editadoRow, error } = await supabase
