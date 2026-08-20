@@ -91,6 +91,22 @@ const PERIODOS = [
  * platillos ENTREGADOS en el período (devengado). Es una mezcla
  * cash/accrual deliberada por simplicidad; se documenta para que no
  * se lea como un descuadre.
+ *
+ * Agregado 2026-08-19 (reporte del usuario: "no estás tomando en
+ * cuenta las comisiones de Stripe"): `compras.comision_stripe_mxn`
+ * guarda el monto REAL que Stripe cobró por cada pago (viene del
+ * `balance_transaction` de Stripe, no de un % estimado — varía según
+ * tipo de tarjeta). Compras hechas ANTES de este cambio no tienen este
+ * dato (columna nueva, `null` en filas viejas) y se tratan como $0 —
+ * así que cifras que mezclen período histórico con compras viejas
+ * pueden subestimar la comisión real un poco hasta que todo el
+ * histórico relevante sea posterior a este fix. Se resta de
+ * "Ingresos" en TODOS los cálculos de utilidad/flujo/margen de
+ * contribución (Resumen, P&L, Flujo de caja, Balance, punto de
+ * equilibrio) porque es dinero que nunca llega al banco — "Ingresos"
+ * como tal (el KPI, el ticket promedio, el desglose por paquete) se
+ * deja en bruto a propósito, porque es lo que el cliente pagó, no lo
+ * que HotPot Factor se queda.
  */
 export default async function AdminFinanzasPage({
   searchParams,
@@ -135,10 +151,12 @@ export default async function AdminFinanzasPage({
     { data: platillosActivos },
   ] = await Promise.all([
     // `creado_en`, no `created_at` — confirmado 2026-08-19 vía
-    // information_schema (ver auditoría de Finanzas).
+    // information_schema (ver auditoría de Finanzas). `comision_stripe_mxn`
+    // y `creditos` agregados 2026-08-19 para restar la comisión real de
+    // Stripe y poder prorratearla por crédito vendido.
     admin
       .from("compras")
-      .select("monto_mxn, creado_en, paquetes(nombre)")
+      .select("monto_mxn, creado_en, creditos, comision_stripe_mxn, paquetes(nombre)")
       .gte("creado_en", inicioPeriodo.toISOString())
       .lte("creado_en", finPeriodo.toISOString()),
     admin
@@ -159,7 +177,7 @@ export default async function AdminFinanzasPage({
     admin.from("capital_movimientos").select("id, tipo, monto_mxn, fecha, nota").order("fecha", { ascending: false }),
     admin.from("gastos").select("id, descripcion, monto_mxn, proveedor, fecha_vencimiento").eq("pagado", false).order("fecha_vencimiento", { ascending: true }),
     admin.from("pedidos").select("platillo_id, platillos(costo_mxn)").eq("estado", "entregado").gte("fecha_entrega", toISODate(inicioPeriodo)).lte("fecha_entrega", toISODate(finPeriodo)),
-    admin.from("compras").select("monto_mxn"),
+    admin.from("compras").select("monto_mxn, comision_stripe_mxn"),
     admin.from("gastos").select("monto_mxn"),
     admin.from("pedidos").select("platillo_id, platillos(costo_mxn)").eq("estado", "entregado"),
     admin.from("usuarios").select("id, creado_en, activo, desactivado_en, como_nos_conocio"),
@@ -188,12 +206,23 @@ export default async function AdminFinanzasPage({
   };
   const listaGastos = (gastos ?? []) as unknown as Gasto[];
 
-  type CompraConPaquete = { monto_mxn: number; creado_en: string | null; paquetes: { nombre: string } | null };
+  type CompraConPaquete = {
+    monto_mxn: number;
+    creado_en: string | null;
+    creditos: number | null;
+    comision_stripe_mxn: number | null;
+    paquetes: { nombre: string } | null;
+  };
   const listaCompras = (compras ?? []) as unknown as CompraConPaquete[];
 
   const ingresos = (compras ?? []).reduce((acc, c) => acc + c.monto_mxn, 0);
+  // Comisión real que Stripe se quedó de cada pago del período — viene
+  // del balance_transaction de Stripe (ver webhook), no de un %
+  // estimado. Compras previas a este fix no la tienen (null -> $0).
+  const comisionesStripe = listaCompras.reduce((acc, c) => acc + (c.comision_stripe_mxn ?? 0), 0);
+  const creditosVendidosPeriodo = listaCompras.reduce((acc, c) => acc + (c.creditos ?? 0), 0);
   const totalGastos = listaGastos.reduce((acc, g) => acc + g.monto_mxn, 0);
-  const utilidad = ingresos - totalGastos;
+  const utilidad = ingresos - comisionesStripe - totalGastos;
   const margen = ingresos > 0 ? Math.round((utilidad / ingresos) * 100) : 0;
   const ticketPromedio = (compras ?? []).length > 0 ? Math.round(ingresos / (compras ?? []).length) : 0;
 
@@ -280,7 +309,7 @@ export default async function AdminFinanzasPage({
     (acc, p) => acc + ((p.platillos as unknown as { costo_mxn: number | null } | null)?.costo_mxn ?? 0),
     0,
   );
-  const utilidadBruta = ingresos - costoProduccionPeriodo;
+  const utilidadBruta = ingresos - comisionesStripe - costoProduccionPeriodo;
 
   // ---------- Depreciación (real, de activos_fijos) ----------
   // Corregido 2026-08-19 (auditoría): la versión anterior cargaba
@@ -317,6 +346,7 @@ export default async function AdminFinanzasPage({
 
   // ---------- Indicadores: LTV, churn, break-even, capacidad ----------
   const ingresosHistoricoTotal = (comprasHistorico ?? []).reduce((acc, c) => acc + c.monto_mxn, 0);
+  const comisionesStripeHistorico = (comprasHistorico ?? []).reduce((acc, c) => acc + (c.comision_stripe_mxn ?? 0), 0);
   const clientesConCompraTotal = comprasPorUsuarioPasivo.size;
   const ltv = clientesConCompraTotal > 0 ? Math.round(ingresosHistoricoTotal / clientesConCompraTotal) : 0;
 
@@ -332,7 +362,12 @@ export default async function AdminFinanzasPage({
       : (platillosActivos ?? []).length > 0
         ? (platillosActivos ?? []).reduce((acc, p) => acc + (p.costo_mxn ?? 0), 0) / (platillosActivos ?? []).length
         : 0;
-  const margenContribucionPorcion = precioPromedioPorCredito - costoProduccionPromedioPorcion;
+  // Comisión de Stripe prorrateada por crédito vendido en el período
+  // (la comisión es por transacción, no por crédito, así que esto es
+  // un promedio — un paquete con más créditos diluye la comisión por
+  // crédito, uno con menos la concentra).
+  const comisionPromedioPorCredito = creditosVendidosPeriodo > 0 ? comisionesStripe / creditosVendidosPeriodo : 0;
+  const margenContribucionPorcion = precioPromedioPorCredito - costoProduccionPromedioPorcion - comisionPromedioPorCredito;
   const costosFijosPeriodo = totalGastos + depreciacionPeriodo;
   const breakEvenPorciones = margenContribucionPorcion > 0 ? Math.ceil(costosFijosPeriodo / margenContribucionPorcion) : null;
   const breakEvenMxn = breakEvenPorciones != null ? Math.round(breakEvenPorciones * precioPromedioPorCredito) : null;
@@ -365,7 +400,8 @@ export default async function AdminFinanzasPage({
     0,
   );
   const gastosHistoricoTotal = (gastosHistorico ?? []).reduce((acc, g) => acc + g.monto_mxn, 0);
-  const utilidadAcumulada = ingresosHistoricoTotal - gastosHistoricoTotal - costoProduccionHistoricoTotal;
+  const utilidadAcumulada =
+    ingresosHistoricoTotal - comisionesStripeHistorico - gastosHistoricoTotal - costoProduccionHistoricoTotal;
   const totalCapital = aportacionesNetas + utilidadAcumulada;
   const diferenciaNoConciliada = totalActivos - totalPasivos - totalCapital;
 
@@ -452,13 +488,18 @@ export default async function AdminFinanzasPage({
 
       {vista === "resumen" && (
         <>
-          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Kpi etiqueta="INGRESOS" valor={`$${currency.format(ingresos)}`} nota="cobrado por Stripe" destacado />
+          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <Kpi etiqueta="INGRESOS" valor={`$${currency.format(ingresos)}`} nota="cobrado por Stripe, bruto" destacado />
+            <Kpi
+              etiqueta="COMISIONES STRIPE"
+              valor={`$${currency.format(comisionesStripe)}`}
+              nota={ingresos > 0 ? `${((comisionesStripe / ingresos) * 100).toFixed(1)}% de lo cobrado` : "sin cobros en el período"}
+            />
             <Kpi etiqueta="GASTOS" valor={`$${currency.format(totalGastos)}`} nota={`${listaGastos.length} registrados`} />
             <Kpi
               etiqueta="UTILIDAD (CAJA)"
               valor={`$${currency.format(utilidad)}`}
-              nota={`margen ${margen}% · ingresos − gastos, sin costo de producción ni ISR — ve a P&L para la utilidad neta real`}
+              nota={`margen ${margen}% · ingresos − comisión Stripe − gastos, sin costo de producción ni ISR — ve a P&L para la utilidad neta real`}
             />
             <Kpi etiqueta="CRÉDITOS PENDIENTES" valor={String(saldoTotal)} nota="vendidos sin consumir" />
           </div>
@@ -506,6 +547,7 @@ export default async function AdminFinanzasPage({
         <div className="flex max-w-[700px] flex-col gap-1 rounded-card border border-line bg-surface p-6">
           <p className="mb-2 text-[12px] font-medium uppercase tracking-[1px] text-gold">Estado de resultados</p>
           <PnlRow label="Ingresos (compras cobradas)" valor={ingresos} />
+          <PnlRow label="Comisiones de Stripe (procesamiento de pagos)" valor={-comisionesStripe} />
           <PnlRow label="Costo de producción (platillos entregados)" valor={-costoProduccionPeriodo} />
           <PnlDiv />
           <PnlRow label="Utilidad bruta" valor={utilidadBruta} fuerte />
@@ -557,9 +599,11 @@ export default async function AdminFinanzasPage({
           <div className="flex max-w-[700px] flex-col gap-1 rounded-card border border-line bg-surface p-6">
             <p className="mb-2 text-[12px] font-medium uppercase tracking-[1px] text-gold">Flujo de caja — total del período</p>
             <p className="mb-2 text-[12px] text-muted">
-              100% real: el negocio cobra al momento con Stripe, así que no hay diferencia entre devengado y efectivo que calcular aquí.
+              El negocio cobra al momento con Stripe, así que no hay diferencia entre devengado y efectivo que calcular aquí — salvo la
+              comisión que Stripe descuenta antes de depositar, que sí se resta abajo porque nunca llega al banco.
             </p>
             <PnlRow label="Entradas de efectivo" valor={ingresos} />
+            <PnlRow label="Comisiones de Stripe" valor={-comisionesStripe} />
             <PnlRow label="Salidas de efectivo" valor={-totalGastos} />
             <PnlDiv />
             <PnlRow label="Flujo neto del período" valor={utilidad} fuerte />
@@ -606,12 +650,13 @@ export default async function AdminFinanzasPage({
           <CanalesGrid canales={canalesOrdenados} />
 
           <p className="text-[11px] leading-[16px] text-muted/70">
-            Supuestos: LTV usa el ingreso histórico total entre clientes con al menos una compra (no proyecta retención futura). Churn
-            compara clientes dados de baja en el período contra los que ya existían al inicio del período (necesitas marcar clientes
-            como inactivos en Clientes para que este número se mueva). Punto de equilibrio asume que todos los gastos registrados son
-            fijos (no hay clasificación fijo/variable en `gastos`) y usa el margen de contribución promedio por crédito. El CAC divide
-            el gasto total de categoría Marketing entre los clientes nuevos del período, sin distinguir por canal (no hay gasto
-            registrado por canal, solo el conteo de clientes sí se desglosa abajo).
+            Supuestos: LTV usa el ingreso histórico total (bruto, sin restar comisión de Stripe) entre clientes con al menos una compra
+            (no proyecta retención futura). Churn compara clientes dados de baja en el período contra los que ya existían al inicio del
+            período (necesitas marcar clientes como inactivos en Clientes para que este número se mueva). Punto de equilibrio asume que
+            todos los gastos registrados son fijos (no hay clasificación fijo/variable en `gastos`) y usa el margen de contribución
+            promedio por crédito, ya neto de comisión de Stripe prorrateada. El CAC divide el gasto total de categoría Marketing entre
+            los clientes nuevos del período, sin distinguir por canal (no hay gasto registrado por canal, solo el conteo de clientes sí
+            se desglosa abajo).
           </p>
         </>
       )}
