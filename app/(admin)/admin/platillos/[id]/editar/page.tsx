@@ -9,6 +9,8 @@ type PlatilloEditable = {
   nombre: string;
   descripcion: string | null;
   foto_url: string | null;
+  linea: "normal" | "fit" | "prime" | null;
+  codigo_receta: string | null;
   calorias: number | null;
   proteina_g: number | null;
   carbs_g: number | null;
@@ -21,24 +23,28 @@ type PlatilloEditable = {
   activo: boolean;
 };
 
-/** Pantalla dedicada para editar un platillo existente — ver nota en `../../page.tsx`. */
+/**
+ * Pantalla dedicada para editar un platillo existente — ver nota en
+ * `../../page.tsx`. `linea`/`codigo_receta` agregadas 2026-08-19 al
+ * reemplazar el catálogo inventado con las 150 recetas reales.
+ */
 export default async function EditarPlatilloPage({ params }: { params: Promise<{ id: string }> }) {
   await requireStaff();
   const { id } = await params;
   const admin = createAdminClient();
 
-  // El .select() con 14 columnas hace que el inferidor de tipos de
-  // supabase-js pierda `costo_mxn` del tipo resultante (build de
-  // Vercel 2026-08-13: "Property 'costo_mxn' is missing in type...")
-  // — es un límite conocido de cómo postgrest-js parsea strings de
-  // select muy largos a nivel de tipos, no un error de datos reales
-  // (la columna sí se trae en runtime). Se castea explícitamente al
-  // tipo real, mismo patrón que ya se usa en el resto del proyecto
-  // para selects que el inferidor no resuelve bien.
+  // El .select() con muchas columnas hace que el inferidor de tipos de
+  // supabase-js pierda alguna del tipo resultante (build de Vercel
+  // 2026-08-13: "Property 'costo_mxn' is missing in type...") — es un
+  // límite conocido de cómo postgrest-js parsea strings de select muy
+  // largos a nivel de tipos, no un error de datos reales (la columna
+  // sí se trae en runtime). Se castea explícitamente al tipo real,
+  // mismo patrón que ya se usa en el resto del proyecto para selects
+  // que el inferidor no resuelve bien.
   const { data: platilloRaw } = await admin
     .from("platillos")
     .select(
-      "id, nombre, descripcion, foto_url, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, costo_mxn, activo",
+      "id, nombre, descripcion, foto_url, linea, codigo_receta, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, costo_mxn, activo",
     )
     .eq("id", id)
     .maybeSingle();
