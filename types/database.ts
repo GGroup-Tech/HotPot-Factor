@@ -38,6 +38,10 @@ export interface Database {
       // `direccion` (son `calle_numero` + `codigo_postal` por separado).
       // `apellido` es columna propia NOT NULL, no parte de `nombre`.
       // `fecha_nac` agregada 2026-08-18 para registrar la edad del cliente.
+      // `lat`/`lng` agregadas 2026-08-19 para el proyecto de ruteo óptimo
+      // + WhatsApp al repartidor (backlog #55, Fase 1) — requiere correr
+      // la migración `alter table usuarios add column lat numeric, add
+      // column lng numeric;` antes de que este tipo calce con la base real.
       usuarios: {
         Row: {
           id: string; // = auth.users.id, puesto por el trigger on_auth_user_created
@@ -55,6 +59,8 @@ export interface Database {
           actualizado_en: string | null;
           desactivado_en: string | null;
           como_nos_conocio: string | null;
+          lat: number | null;
+          lng: number | null;
         };
         Insert: Partial<Database["public"]["Tables"]["usuarios"]["Row"]> & {
           id: string;
@@ -255,6 +261,13 @@ export interface Database {
       // Sin `direccion_entrega` (no existe — la dirección de entrega
       // sale de `usuarios`). Timestamps son `creado_en`/`actualizado_en`,
       // no `created_at`/`updated_at`. `corte_edicion` es NOT NULL.
+      // `token_confirmacion`/`token_expira_en` agregadas 2026-08-19 para
+      // el proyecto de ruteo óptimo + WhatsApp al repartidor (backlog
+      // #55, Fase 1) — requiere correr la migración `alter table
+      // pedidos add column token_confirmacion text unique, add column
+      // token_expira_en timestamptz;` antes de que este tipo calce con
+      // la base real. El repartidor confirma la entrega tocando un link
+      // con este token, sin necesitar cuenta de staff.
       pedidos: {
         // UNIQUE(usuario_id, fecha_entrega)
         Row: {
@@ -267,6 +280,8 @@ export interface Database {
           corte_edicion: string; // timestamptz, NOT NULL
           creado_en: string | null;
           actualizado_en: string | null;
+          token_confirmacion: string | null;
+          token_expira_en: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["pedidos"]["Row"]> & {
           usuario_id: string;
