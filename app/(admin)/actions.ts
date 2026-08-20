@@ -706,3 +706,88 @@ export async function alternarClienteActivo(usuarioId: string, activo: boolean):
   revalidatePath("/admin/finanzas");
   return { ok: true };
 }
+
+/**
+ * Agregado 2026-08-19 (el usuario preguntó "cómo se le cambia el
+ * estatus de un pedido de programado a entregado" — no existía forma
+ * de hacerlo: Reparto, Producción y Pedidos solo MOSTRABAN el estado
+ * en una pill, ninguna de las tres tenía un botón/acción que lo
+ * escribiera). Esto importa más allá de la UI: "Costo de producción",
+ * "Ingreso por porción" y "Capacidad de producción" en Finanzas se
+ * calculan sobre `pedidos.estado = 'entregado'` — sin este botón, esos
+ * números se iban a quedar en $0 para siempre sin importar cuántas
+ * entregas reales hubiera, exactamente como pasó con "Ingresos" en el
+ * dashboard por el bug de `created_at`.
+ *
+ * No valida transición (no exige pasar por 'en_produccion' primero) a
+ * propósito — el negocio no tiene un paso de cocina que se registre
+ * aparte, así que forzar una máquina de estados aquí sería inventar
+ * una regla que no existe en la operación real.
+ */
+export async function actualizarEstadoPedido(pedidoId: string, estado: string): Promise<AccionAdminResult> {
+  await requireStaff();
+  const admin = createAdminClient();
+  const { error } = await admin.from("pedidos").update({ estado }).eq("id", pedidoId);
+  if (error) return { ok: false, error: "No se pudo actualizar el estado del pedido." };
+  revalidatePath("/admin/reparto");
+  revalidatePath("/admin/produccion");
+  revalidatePath("/admin/pedidos");
+  revalidatePath("/admin");
+  revalidatePath("/admin/finanzas");
+  return { ok: true };
+}
+
+/**
+ * Genera (o reutiliza, si ya hay uno vigente) el link público de
+ * confirmación de entrega para un pedido — Fase 1 del proyecto de
+ * ruteo óptimo + WhatsApp al repartidor (backlog #55). El repartidor
+ * abre este link SIN necesitar cuenta de staff (`/confirmar-entrega/
+ * [token]`, ver `app/confirmar-entrega/`) y marca la entrega como
+ * hecha desde su celular.
+ *
+ * Puente manual mientras no está listo el envío automático por
+ * WhatsApp (Twilio): por ahora, el staff genera el link aquí, lo
+ * copia, y lo manda a mano por WhatsApp — cuando la Fase 2 esté lista,
+ * este mismo link es el que se mandará automáticamente.
+ *
+ * Requiere la migración `alter table pedidos add column
+ * token_confirmacion text unique, add column token_expira_en
+ * timestamptz;` — sin ella, esto falla con PGRST204 (columna
+ * inexistente), igual que cualquier otro caso de este proyecto que ya
+ * hemos visto.
+ */
+export async function generarLinkConfirmacionPedido(pedidoId: string): Promise<AccionAdminResult & { url?: string }> {
+  await requireStaff();
+  const admin = createAdminClient();
+
+  const { data: pedido, error: fetchError } = await admin
+    .from("pedidos")
+    .select("id, fecha_entrega, token_confirmacion, token_expira_en")
+    .eq("id", pedidoId)
+    .maybeSingle();
+
+  if (fetchError || !pedido) return { ok: false, error: "No se encontró el pedido." };
+
+  const vigente = pedido.token_confirmacion && pedido.token_expira_en && new Date(pedido.token_expira_en) > new Date();
+  let token = pedido.token_confirmacion;
+
+  if (!vigente) {
+    token = crypto.randomUUID();
+    // Expira al final del día de entrega (23:59 hora del servidor) —
+    // no tiene sentido que un link de "confirma esta entrega" siga
+    // vivo semanas después.
+    const expira = new Date(`${pedido.fecha_entrega}T23:59:59`);
+    const { error: updateError } = await admin
+      .from("pedidos")
+      .update({ token_confirmacion: token, token_expira_en: expira.toISOString() })
+      .eq("id", pedidoId);
+    if (updateError) return { ok: false, error: "No se pudo generar el link de confirmación." };
+  }
+
+  // `www.hotpotfactor.com`, no `hotpotfactor.com` a secas — el apex
+  // redirige (308) al subdominio con www (lo descubrimos con el
+  // webhook de Stripe), y un link de WhatsApp que rebota con redirect
+  // se ve mal / puede fallar según el cliente de WhatsApp.
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.hotpotfactor.com";
+  return { ok: true, url: `${base}/confirmar-entrega/${token}` };
+}
