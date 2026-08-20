@@ -1,7 +1,7 @@
 /**
  * Algoritmo de menú semanal óptimo (backlog #62, 2026-08-19). Decide
  * qué platillos van en el menú fijo (5, uno por día lun-vie) y en la
- * lista de comodines de un mes, con dos reglas, en este orden de
+ * lista de comodines de un mes, con TRES reglas, en este orden de
  * prioridad:
  *
  *   1. No repetir un platillo hasta agotar TODO el catálogo activo
@@ -9,14 +9,27 @@
  *      como en comodines — ambos los define el restaurante).
  *   2. Dentro de lo que sí se puede elegir en un momento dado (el
  *      grupo de platillos "empatados" en antigüedad de uso — casi
- *      siempre TODOS los nunca usados, al principio), preferir la
- *      combinación que menos ingredientes repite entre sí, para no
- *      servir puro pollo o pura res seguido.
+ *      siempre TODOS los nunca usados, al principio), evitar repetir
+ *      la MISMA PROTEÍNA PRINCIPAL (pollo/res/cerdo/pavo/camarón-
+ *      marisco/pescado/huevo) que ya quedó elegida ese mes, siempre
+ *      que haya alguna opción disponible sin repetirla.
+ *   3. Si con la regla 2 sigue habiendo empate (o ningún candidato del
+ *      pool tiene proteína detectada), preferir el que menos
+ *      ingredientes repite en general con lo ya elegido ese mes.
+ *
+ * Regla 2 se agregó 2026-08-20: con solo el criterio de traslape de
+ * ingredientes (regla 3), el usuario reportó un menú real con DOS
+ * platillos de camarón en el mismo menú fijo de 5 días — dos recetas
+ * de camarón pueden diferir bastante en el resto de sus ingredientes
+ * (una a la diabla, otra empanizada) y aun así salir con traslape bajo
+ * contra el resto de candidatos, así que el puro Jaccard sobre
+ * ingredientes no bastaba para capturar "es la misma proteína".
  *
  * Puro cálculo, sin acceso a base de datos — la acción de servidor
  * (`generarMenuOptimo` en `app/(admin)/actions.ts`) arma los
  * `CandidatoMenu[]` a partir de `platillos`, `platillo_ingredientes`,
- * `menu_mes` y `comodines_mes`, y llama a `generarPropuestaMenu`.
+ * `menu_mes` y `comodines_mes` (incluyendo `detectarProteina()` para
+ * cada uno), y llama a `generarPropuestaMenu`.
  */
 
 export interface CandidatoMenu {
@@ -26,6 +39,13 @@ export interface CandidatoMenu {
   ingredientes: Set<string>;
   /** anio*12+mes de la última vez que se usó (menú fijo o comodín). `-Infinity` si nunca. */
   ultimoUso: number;
+  /**
+   * Proteína principal detectada (pollo/res/cerdo/pavo/camaron_marisco/
+   * pescado/huevo), o `null` si no se detectó ninguna (platillo
+   * vegetariano o receta sin match claro) — `null` nunca bloquea nada,
+   * varios platillos sin proteína detectada pueden coexistir libremente.
+   */
+  proteina: string | null;
 }
 
 /** Similitud de Jaccard entre dos conjuntos de ingredientes — 0 si no comparten nada, 1 si son idénticos. */
@@ -57,15 +77,27 @@ export function generarPropuestaMenu(candidatos: CandidatoMenu[], totalSlots: nu
   for (let i = 0; i < n; i++) {
     // El "pool" de esta ronda: todos los candidatos empatados en la
     // antigüedad de uso más vieja disponible (normalmente, al
-    // principio, son TODOS los nunca usados — ahí es donde el
-    // criterio de variedad de ingredientes hace todo el trabajo).
+    // principio, son TODOS los nunca usados — ahí es donde los
+    // criterios de proteína/variedad hacen todo el trabajo).
     let minRecencia = restantes[0]!.ultimoUso;
     for (const c of restantes) if (c.ultimoUso < minRecencia) minRecencia = c.ultimoUso;
     const pool = restantes.filter((c) => c.ultimoUso === minRecencia);
 
-    let mejor = pool[0]!;
+    // Regla 2: dentro del pool, si hay al menos un candidato cuya
+    // proteína (si tiene alguna detectada) NO se repite con lo ya
+    // elegido este mes, restringe el pool a esos — así nunca se elige
+    // una segunda receta de camarón, res, etc. mientras haya alguna
+    // alternativa de otra proteína disponible en el mismo empate de
+    // antigüedad. Si TODO el pool repetiría proteína (o ninguno tiene
+    // proteína detectada), no hay alternativa real: se usa el pool
+    // completo y manda la regla 3 (traslape de ingredientes).
+    const proteinasUsadas = new Set(seleccion.map((s) => s.proteina).filter((p): p is string => p !== null));
+    const poolSinProteinaRepetida = pool.filter((c) => c.proteina === null || !proteinasUsadas.has(c.proteina));
+    const poolEfectivo = poolSinProteinaRepetida.length > 0 ? poolSinProteinaRepetida : pool;
+
+    let mejor = poolEfectivo[0]!;
     let mejorScore = solapamientoConSeleccion(mejor, seleccion);
-    for (const c of pool.slice(1)) {
+    for (const c of poolEfectivo.slice(1)) {
       const score = solapamientoConSeleccion(c, seleccion);
       if (score < mejorScore || (score === mejorScore && c.nombre.localeCompare(mejor.nombre) < 0)) {
         mejor = c;
