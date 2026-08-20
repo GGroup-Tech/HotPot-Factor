@@ -2,7 +2,7 @@ import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ImprimirButton } from "@/app/components/admin/ImprimirButton";
 import { ExportarCsvButton } from "@/app/components/admin/ExportarCsvButton";
-import { EstadoPedidoBoton, LinkConfirmacionBoton } from "./RepartoClientForms";
+import { EstadoPedidoBoton, LinkConfirmacionDiaBoton } from "./RepartoClientForms";
 import type { PedidoEstado } from "@/types/database";
 
 const fechaLarga = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" });
@@ -40,6 +40,12 @@ const ESTADO_INFO: Record<string, { label: string; color: string }> = {
  * cosmético — "Costo de producción" e "Ingreso por porción" en
  * Finanzas dependen de `estado = 'entregado'`, así que sin este botón
  * esos números se quedaban en $0 para siempre.
+ *
+ * Ampliado el mismo día: "Copiar link del día para repartidor"
+ * (`LinkConfirmacionDiaBoton`) genera UN link que cubre TODAS las
+ * entregas de `fecha` (agrupadas por dirección del lado del
+ * repartidor, no por pedido) — puente manual mientras no está listo
+ * el envío automático por WhatsApp (Twilio, Fase 2 del backlog #55).
  */
 export default async function AdminRepartoPage({
   searchParams,
@@ -118,7 +124,8 @@ export default async function AdminRepartoPage({
             ›
           </a>
         </div>
-        <div className="flex gap-2.5">
+        <div className="flex flex-wrap gap-2.5">
+          <LinkConfirmacionDiaBoton fecha={fechaISO} />
           <ExportarCsvButton filas={filasCsv} nombreArchivo={`reparto-${fechaISO}.csv`} className="btn-secondary rounded-control px-[18px] py-[10px] text-[13px]">
             Exportar CSV
           </ExportarCsvButton>
@@ -184,10 +191,7 @@ export default async function AdminRepartoPage({
                   <td className="px-5 py-3.5">{p.usuarios?.nombre ?? "—"}</td>
                   <td className="px-5 py-3.5">{p.platillos?.nombre ?? "—"}</td>
                   <td className="px-5 py-3.5 text-right">
-                    <div className="flex flex-col items-end gap-1.5">
-                      <EstadoPedidoBoton pedidoId={p.id} estado={p.estado} />
-                      <LinkConfirmacionBoton pedidoId={p.id} />
-                    </div>
+                    <EstadoPedidoBoton pedidoId={p.id} estado={p.estado} />
                   </td>
                 </tr>
               ))
