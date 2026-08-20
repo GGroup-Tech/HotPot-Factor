@@ -28,6 +28,7 @@ type PlatilloData = {
   foto_url: string | null;
   linea: "normal" | "fit" | "prime" | null;
   codigo_receta: string | null;
+  rendimiento_porciones: number;
   calorias: number | null;
   proteina_g: number | null;
   carbs_g: number | null;
@@ -81,6 +82,14 @@ export function CrearPlatilloForm() {
       <Campo label="Foto (opcional, PNG o JPEG)">
         <input name="foto" type="file" accept="image/png,image/jpeg" className="input" />
       </Campo>
+      <Campo label="Rendimiento de la receta (porciones por lote)">
+        <input name="rendimiento_porciones" type="number" min="1" defaultValue={10} className="input" />
+      </Campo>
+      <p className="-mt-2 text-[11px] text-muted">
+        De cuántas porciones es el lote que describen los ingredientes de este platillo (si le agregas
+        ingredientes en "Ingredientes por platillo") — se usa para calcular la lista de compras en{" "}
+        <span className="text-cream">Compras</span>. Si no vas a cargar ingredientes, déjalo en 10.
+      </p>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Campo label="Calorías">
           <input name="calorias" type="number" min="0" placeholder="450" className="input" />
@@ -157,6 +166,13 @@ export function EditarPlatilloForm({ platillo }: { platillo: PlatilloData }) {
         <input name="foto" type="file" accept="image/png,image/jpeg" className="input" />
       </Campo>
       <input type="hidden" name="foto_url_actual" defaultValue={platillo.foto_url ?? ""} />
+      <Campo label="Rendimiento de la receta (porciones por lote)">
+        <input name="rendimiento_porciones" type="number" min="1" defaultValue={platillo.rendimiento_porciones} className="input" />
+      </Campo>
+      <p className="-mt-2 text-[11px] text-muted">
+        De cuántas porciones es el lote que describen los ingredientes de este platillo — se usa para
+        calcular la lista de compras en <span className="text-cream">Compras</span>.
+      </p>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Campo label="Calorías">
           <input name="calorias" type="number" min="0" defaultValue={platillo.calorias ?? ""} className="input" />
