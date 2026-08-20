@@ -22,7 +22,6 @@ const TITULOS: { href: string; titulo: string; exact: boolean }[] = [
   { href: "/admin/menu", titulo: "Menú del mes", exact: false },
   { href: "/admin/platillos", titulo: "Platillos", exact: false },
   { href: "/admin/produccion", titulo: "Producción", exact: false },
-  { href: "/admin/compras", titulo: "Compras", exact: false },
   { href: "/admin/reparto", titulo: "Reparto", exact: false },
   { href: "/admin/cobertura", titulo: "Cobertura", exact: false },
   { href: "/admin/finanzas", titulo: "Finanzas", exact: false },
@@ -41,8 +40,9 @@ function tituloDeRuta(pathname: string): string {
  * `(admin)/layout.tsx` hasta cada página. La fecha siempre es "hoy" —
  * en el diseño original es solo contexto, no un dato de la página.
  *
- * "Cobertura" agregado 2026-08-19 junto con AdminSidebar.
- * "Compras" agregado 2026-08-20 (backlog #56).
+ * "Cobertura" agregado 2026-08-19 junto con AdminSidebar. La lista de
+ * compras (backlog #56) vive como pestaña dentro de "Producción", no
+ * como entrada propia aquí — ver `admin/produccion/page.tsx`.
  */
 export function AdminChrome({
   nombreStaff,
