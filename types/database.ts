@@ -183,6 +183,25 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["zonas_cobertura"]["Row"]>;
         Relationships: [];
       };
+      // Tabla nueva 2026-08-19 — polígono de cobertura real (lat/lng),
+      // complementa el match por nombre de colonia de arriba. `puntos`
+      // es un array JSON de `{lat,lng}` en el orden en que se dibujaron
+      // los vértices — ver `lib/cobertura-poligono.ts`.
+      zonas_cobertura_poligonos: {
+        Row: {
+          id: string;
+          nombre: string;
+          puntos: { lat: number; lng: number }[];
+          activo: boolean;
+          creado_en: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["zonas_cobertura_poligonos"]["Row"]> & {
+          nombre: string;
+          puntos: { lat: number; lng: number }[];
+        };
+        Update: Partial<Database["public"]["Tables"]["zonas_cobertura_poligonos"]["Row"]>;
+        Relationships: [];
+      };
       lista_espera: {
         Row: {
           id: string;
