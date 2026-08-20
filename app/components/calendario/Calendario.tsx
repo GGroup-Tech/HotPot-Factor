@@ -18,14 +18,15 @@ import { DIAS_SEMANA_LARGO } from "@/lib/calendario";
  * espacio muerto a la derecha. (Antes eran `w-[200px]` fijas a secas;
  * eso fue una corrección anterior para un desfase visual puntual, no
  * un requisito de que fueran literalmente 200px siempre.)
+ *
+ * Prop `comodinesDisponibles` ELIMINADO 2026-08-19 junto con el tope
+ * de 2 comodines/mes — los comodines son ilimitados.
  */
 export function Calendario({
   semanas,
-  comodinesDisponibles,
   platillosComodin,
 }: {
   semanas: (DiaCeldaData | null)[][];
-  comodinesDisponibles: number;
   platillosComodin: { id: string; nombre: string }[];
 }) {
   return (
@@ -42,12 +43,7 @@ export function Calendario({
           <div key={i} className="flex gap-3">
             {semana.map((dia, j) =>
               dia ? (
-                <DiaCelda
-                  key={dia.fecha}
-                  dia={dia}
-                  comodinesDisponibles={comodinesDisponibles}
-                  platillosComodin={platillosComodin}
-                />
+                <DiaCelda key={dia.fecha} dia={dia} platillosComodin={platillosComodin} />
               ) : (
                 <div key={j} className="h-[96px] min-w-[200px] flex-1" />
               ),
