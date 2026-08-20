@@ -57,12 +57,13 @@ export async function geocodificarDireccion(direccion: string): Promise<Coordena
       results: { geometry: { location: { lat: number; lng: number } } }[];
     };
 
-    if (data.status !== "OK" || data.results.length === 0) {
+    const primero = data.results[0];
+    if (data.status !== "OK" || !primero) {
       console.warn("geocodificarDireccion: sin resultado", { direccion, status: data.status });
       return null;
     }
 
-    const { lat, lng } = data.results[0].geometry.location;
+    const { lat, lng } = primero.geometry.location;
     return { lat, lng };
   } catch (err) {
     console.error("geocodificarDireccion: fallo inesperado", err);
