@@ -208,6 +208,7 @@ export interface Database {
           descuento_mxn: number | null;
           payment_ref: string;
           creado_en: string | null;
+          comision_stripe_mxn: number | null;
         };
         Insert: Partial<Database["public"]["Tables"]["compras"]["Row"]> & {
           usuario_id: string;
