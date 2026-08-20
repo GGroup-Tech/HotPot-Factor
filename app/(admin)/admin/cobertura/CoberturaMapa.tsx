@@ -119,6 +119,11 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
     }
   }, [scriptListo, zonas]);
 
+  // Mientras se dibuja, el overlay es una LÍNEA abierta (Polyline) —
+  // no un polígono cerrado/relleno — para que se vea claramente que
+  // la figura sigue "en construcción" y no dé la impresión de que ya
+  // terminó apenas se marcan 3 puntos. Solo al darle "Terminar" se
+  // convierte en un Polygon cerrado y relleno, editable.
   function empezarDibujo() {
     const google = window.google;
     const map = mapRef.current;
@@ -130,37 +135,36 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
     setDibujando(true);
     setNumPuntos(0);
 
-    const poligono = new google.maps.Polygon({
+    const linea = new google.maps.Polyline({
       map,
-      // `[[]]` = un anillo, vacío — NO `[]` a secas. Con `[]` la API no
-      // puede distinguir "un anillo vacío" de "cero anillos" y elige lo
-      // segundo, así que `getPath()` regresa `undefined` y el primer
-      // `.push()` revienta con "Cannot read properties of undefined"
-      // (error real visto en producción 2026-08-19).
-      paths: [[]],
+      // `[]` aquí sí es inequívoco: Polyline solo tiene un path (nunca
+      // "anillos" como Polygon), así que no hay la misma ambigüedad
+      // que forzó el `[[]]` del Polygon final más abajo.
+      path: [],
       strokeColor: "#7FB069",
       strokeOpacity: 0.9,
       strokeWeight: 2,
-      fillColor: "#7FB069",
-      fillOpacity: 0.2,
-      editable: false,
       clickable: false,
     });
-    overlayEnProgresoRef.current = poligono;
+    overlayEnProgresoRef.current = linea;
 
     listenerClickRef.current = map.addListener("click", (evento: any) => {
-      const path = poligono.getPath();
+      const path = linea.getPath();
       path.push(evento.latLng);
       setNumPuntos(path.getLength());
     });
   }
 
+  // Sin tope de puntos — el usuario dibuja los que quiera y decide
+  // cuándo terminar. El botón "Terminar" solo se HABILITA a partir de
+  // 3 puntos (mínimo matemático para que exista un polígono), nunca
+  // se dispara solo.
   function terminarDibujo() {
     const google = window.google;
-    const poligono = overlayEnProgresoRef.current;
-    if (!poligono || !google) return;
+    const linea = overlayEnProgresoRef.current;
+    if (!linea || !google) return;
 
-    const path = poligono.getPath();
+    const path = linea.getPath();
     if (path.getLength() < 3) {
       setError("Dibuja al menos 3 puntos antes de terminar.");
       return;
@@ -170,13 +174,29 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
       google.maps.event.removeListener(listenerClickRef.current);
       listenerClickRef.current = null;
     }
-    poligono.setOptions({ editable: true, clickable: true });
 
     const puntos: { lat: number; lng: number }[] = [];
     for (let i = 0; i < path.getLength(); i++) {
       const punto = path.getAt(i);
       puntos.push({ lat: punto.lat(), lng: punto.lng() });
     }
+
+    // Se quita la línea y se reemplaza por el polígono final (cerrado,
+    // relleno, editable) con esos mismos puntos.
+    linea.setMap(null);
+    const poligono = new google.maps.Polygon({
+      map: mapRef.current,
+      paths: puntos,
+      strokeColor: "#7FB069",
+      strokeOpacity: 0.9,
+      strokeWeight: 2,
+      fillColor: "#7FB069",
+      fillOpacity: 0.2,
+      editable: true,
+      clickable: true,
+    });
+    overlayEnProgresoRef.current = poligono;
+
     setNuevoPoligono(puntos);
     setDibujando(false);
   }
@@ -261,7 +281,8 @@ export function CoberturaMapa({ zonas }: { zonas: Zona[] }) {
 
       {dibujando && (
         <p className="text-[12px] text-muted">
-          Haz clic en el mapa para ir marcando los vértices de la zona (mínimo 3). Cuando termines, dale "Terminar".
+          Haz clic en el mapa para ir marcando los vértices de la zona — los que necesites, no hay límite. Cuando
+          hayas cerrado la figura que quieres, dale "Terminar" (se habilita a partir de 3 puntos).
         </p>
       )}
 
