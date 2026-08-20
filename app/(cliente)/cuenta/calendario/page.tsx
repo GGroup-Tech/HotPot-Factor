@@ -59,11 +59,7 @@ export default async function CalendarioPanelPage({
         comodinPlatillos={mesCal.comodinPlatillos}
       />
 
-      <Calendario
-        semanas={mesCal.semanas}
-        comodinesDisponibles={mesCal.comodinesDisponibles}
-        platillosComodin={mesCal.comodinPlatillos}
-      />
+      <Calendario semanas={mesCal.semanas} platillosComodin={mesCal.comodinPlatillos} />
 
       {/* Barra inferior — Figma 180:187. "Guardar cambios" no aplica
           aquí (a diferencia de /arma-tu-mes, que es un paso del flujo
