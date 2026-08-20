@@ -873,15 +873,53 @@ export async function eliminarPoligonoCobertura(id: string): Promise<AccionAdmin
 }
 
 /**
+ * Detecta la proteína principal de un platillo a partir de su lista
+ * de ingredientes normalizados (minúsculas). Heurística por palabras
+ * clave, no perfecta — pero suficiente para que el algoritmo de menú
+ * óptimo evite meter dos recetas de camarón (o dos de res, etc.) en
+ * el mismo mes solo porque, ingrediente por ingrediente, no se veían
+ * tan parecidas (ver nota en `lib/menu-optimo.ts`, regla 2).
+ *
+ * El orden de evaluación importa poco aquí porque las categorías casi
+ * no comparten palabras clave; se recorre el set de ingredientes y se
+ * regresa la primera categoría que haga match. `null` = no se detectó
+ * ninguna proteína animal (p.ej. platillo vegetariano) — nunca bloquea
+ * nada en el algoritmo.
+ */
+const PALABRAS_PROTEINA: [string, string[]][] = [
+  ["camaron_marisco", ["camaron", "camarones", "marisco", "mariscos", "pulpo", "calamar", "ostion", "ostiones"]],
+  ["pescado", ["pescado", "atun", "salmon", "tilapia", "mojarra", "huachinango", "trucha", "bacalao"]],
+  ["pavo", ["pavo", "guajolote"]],
+  ["pollo", ["pollo", "pechuga de pollo", "muslo de pollo"]],
+  ["cerdo", ["cerdo", "puerco", "tocino", "jamon", "chorizo", "chuleta ahumada"]],
+  ["res", ["res", "aguja", "brisket", "bistec", "arrachera", "milanesa de res", "filete de res", "chuleta de res", "costilla de res", "molida de res", "carne molida"]],
+  ["huevo", ["huevo"]],
+];
+function normalizarSinAcentos(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function detectarProteina(ingredientes: Set<string>): string | null {
+  for (const [categoria, palabras] of PALABRAS_PROTEINA) {
+    for (const ingrediente of ingredientes) {
+      const norm = normalizarSinAcentos(ingrediente);
+      if (palabras.some((p) => norm.includes(normalizarSinAcentos(p)))) return categoria;
+    }
+  }
+  return null;
+}
+
+/**
  * Genera automáticamente el menú fijo (5 días) y los comodines de un
  * mes (backlog #62, 2026-08-19) — algoritmo puro en `lib/menu-optimo.ts`,
  * esta acción solo arma los datos de entrada y guarda el resultado.
  *
  * Reglas confirmadas con el usuario: no repetir un platillo (ni en
  * menú fijo ni en comodines — ambos los define el restaurante) hasta
- * agotar el catálogo completo, y dentro de lo que se pueda elegir en
- * un momento dado, minimizar traslape de ingredientes entre los
- * platillos elegidos ese mes.
+ * agotar el catálogo completo; dentro de lo que se pueda elegir en un
+ * momento dado, evitar repetir la misma proteína principal detectada
+ * (agregado 2026-08-20 tras un reporte real de dos platillos de
+ * camarón en el mismo menú); y como último desempate, minimizar
+ * traslape de ingredientes entre los platillos elegidos ese mes.
  *
  * Se niega a correr sobre un mes ya publicado — cambiar el menú
  * después de publicado podría alterar lo que un cliente ya vio y
@@ -889,9 +927,10 @@ export async function eliminarPoligonoCobertura(id: string): Promise<AccionAdmin
  * existía (`actualizarMenuDia`).
  *
  * Si `platillo_ingredientes` todavía no tiene datos (migración no
- * corrida), el criterio de variedad simplemente no tiene efecto —
- * todos los platillos quedan con ingredientes vacíos y el algoritmo
- * cae de lleno en "no repetir", sin tronar.
+ * corrida), ni la detección de proteína ni el criterio de variedad
+ * tienen efecto — todos los platillos quedan con ingredientes vacíos
+ * y proteína `null`, y el algoritmo cae de lleno en "no repetir", sin
+ * tronar.
  */
 export async function generarMenuOptimo(anio: number, mes: number, numComodines: number): Promise<AccionAdminResult> {
   await requireStaff();
@@ -952,12 +991,16 @@ export async function generarMenuOptimo(anio: number, mes: number, numComodines:
   for (const f of historialMenu ?? []) registrar(f.platillo_id, f.anio, f.mes);
   for (const f of historialComodines ?? []) registrar(f.platillo_id, f.anio, f.mes);
 
-  const candidatos: CandidatoMenu[] = platillos.map((p) => ({
-    id: p.id,
-    nombre: p.nombre,
-    ingredientes: ingredientesPorPlatillo.get(p.id) ?? new Set<string>(),
-    ultimoUso: ultimoUsoPorPlatillo.get(p.id) ?? -Infinity,
-  }));
+  const candidatos: CandidatoMenu[] = platillos.map((p) => {
+    const ingredientes = ingredientesPorPlatillo.get(p.id) ?? new Set<string>();
+    return {
+      id: p.id,
+      nombre: p.nombre,
+      ingredientes,
+      ultimoUso: ultimoUsoPorPlatillo.get(p.id) ?? -Infinity,
+      proteina: detectarProteina(ingredientes),
+    };
+  });
 
   const propuesta = generarPropuestaMenu(candidatos, totalSlots);
   const menuFijo = propuesta.slice(0, 5);
