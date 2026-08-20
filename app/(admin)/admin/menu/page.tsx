@@ -1,7 +1,14 @@
 import { requireStaff } from "@/lib/supabase/staff";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DIAS_SEMANA_LARGO, MESES } from "@/lib/calendario";
-import { DiaMenuForm, ComodinAgregarForm, ComodinQuitarBoton, AccionMenuBoton, NuevoPlatilloInline } from "./MenuClientForms";
+import {
+  DiaMenuForm,
+  ComodinAgregarForm,
+  ComodinQuitarBoton,
+  AccionMenuBoton,
+  NuevoPlatilloInline,
+  GenerarMenuBoton,
+} from "./MenuClientForms";
 
 const fechaLarga = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long" });
 
@@ -30,6 +37,14 @@ type MenuDiaInfo = { platilloId: string; platillo: PlatilloMenuInfo | null };
  * antes eran `<form action={...}>` de servidor inline, que el usuario
  * reportó como "no hacen nada" al hacer click (2026-08-13): sin manejo
  * de error del lado del cliente, cualquier falla quedaba invisible.
+ *
+ * "Generar automáticamente" agregado 2026-08-19 (backlog #62): corre
+ * el algoritmo de menú óptimo (`lib/menu-optimo.ts` vía la acción
+ * `generarMenuOptimo`) para proponer los 5 días fijos + N comodines
+ * de este mes de un solo click, sin repetir ningún platillo hasta
+ * agotar el catálogo y minimizando ingredientes repetidos entre sí.
+ * Solo propone — el staff sigue pudiendo ajustar cualquier día a mano
+ * abajo, y todavía hay que darle "Publicar menú" aparte.
  */
 export default async function AdminMenuPage({
   searchParams,
@@ -98,7 +113,8 @@ export default async function AdminMenuPage({
             ›
           </a>
         </div>
-        <div className="flex items-start gap-2.5">
+        <div className="flex flex-wrap items-start gap-2.5">
+          <GenerarMenuBoton anio={anio} mesNum={mesNum} />
           <AccionMenuBoton
             tipo="copiar"
             anio={anio}
