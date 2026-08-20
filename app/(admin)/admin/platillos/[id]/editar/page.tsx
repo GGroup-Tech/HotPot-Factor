@@ -11,6 +11,7 @@ type PlatilloEditable = {
   foto_url: string | null;
   linea: "normal" | "fit" | "prime" | null;
   codigo_receta: string | null;
+  rendimiento_porciones: number;
   calorias: number | null;
   proteina_g: number | null;
   carbs_g: number | null;
@@ -44,7 +45,7 @@ export default async function EditarPlatilloPage({ params }: { params: Promise<{
   const { data: platilloRaw } = await admin
     .from("platillos")
     .select(
-      "id, nombre, descripcion, foto_url, linea, codigo_receta, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, costo_mxn, activo",
+      "id, nombre, descripcion, foto_url, linea, codigo_receta, rendimiento_porciones, calorias, proteina_g, carbs_g, grasa_g, grasa_saturada_g, fibra_g, sodio_mg, alergenos, costo_mxn, activo",
     )
     .eq("id", id)
     .maybeSingle();
