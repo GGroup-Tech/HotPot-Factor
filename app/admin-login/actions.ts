@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { formatoCorreoValido } from "@/lib/validacion";
 
 export interface AdminLoginState {
   error?: string;
@@ -21,6 +22,10 @@ export async function iniciarSesionStaff(
 ): Promise<AdminLoginState> {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
+
+  if (!formatoCorreoValido(email)) {
+    return { error: "Ese correo no tiene un formato válido." };
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });

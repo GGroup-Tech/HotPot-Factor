@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hayCobertura } from "@/lib/cobertura";
 import { geocodificarDireccion, direccionParaGeocodificar } from "@/lib/geocoding";
 import { hayCoberturaPorPoligono } from "@/lib/cobertura-poligono";
+import { formatoCorreoValido } from "@/lib/validacion";
 
 export interface CrearCuentaState {
   ok: boolean;
@@ -53,6 +54,13 @@ export async function crearCuenta(
     return { ok: false, error: "Completa los campos obligatorios." };
   }
 
+  // Defensa extra del lado servidor (2026-08-20) — el formulario ya
+  // valida el formato del correo antes de enviar, pero esta acción es
+  // el único lugar que de verdad importa para seguridad.
+  if (!formatoCorreoValido(email)) {
+    return { ok: false, error: "Ese correo no tiene un formato válido." };
+  }
+
   // Geocodificación agregada 2026-08-19 (proyecto de ruteo óptimo +
   // WhatsApp al repartidor, Fase 1 — backlog #55) — se hace ANTES de
   // decidir cobertura porque ahora esa decisión la toma el polígono
@@ -91,10 +99,20 @@ export async function crearCuenta(
     return { ok: false, enListaEspera: true };
   }
 
+  // `emailRedirectTo` agregado 2026-08-20 junto con el flujo de
+  // recuperar contraseña — antes no se mandaba, así que el link de
+  // confirmación usaba el Site URL default configurado en Supabase en
+  // vez de pasar por `/auth/callback` (que canjea el `code` PKCE por
+  // una sesión real de forma explícita). `next=/cuenta` porque
+  // confirmar el correo debe dejarlo directo en su panel.
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.hotpotfactor.com";
   const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { nombre: `${nombre} ${apellido}`.trim() } },
+    options: {
+      data: { nombre: `${nombre} ${apellido}`.trim() },
+      emailRedirectTo: `${base}/auth/callback?next=/cuenta`,
+    },
   });
 
   if (signUpError || !signUpData.user) {

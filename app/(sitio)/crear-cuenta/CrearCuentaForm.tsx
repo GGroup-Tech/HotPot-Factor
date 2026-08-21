@@ -2,8 +2,9 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Field, SelectField, TextareaField } from "@/app/components/ui/Field";
+import { Field, PasswordField, SelectField, TextareaField } from "@/app/components/ui/Field";
 import { Button } from "@/app/components/ui/Button";
+import { formatoCorreoValido } from "@/lib/validacion";
 import { crearCuenta, type CrearCuentaState } from "./actions";
 
 const ESTADO_INICIAL: CrearCuentaState = { ok: false };
@@ -13,6 +14,7 @@ export function CrearCuentaForm({ paqueteId }: { paqueteId: string }) {
   const [state, formAction, pending] = useActionState(crearCuenta, ESTADO_INICIAL);
   const [colonia, setColonia] = useState("");
   const [cobertura, setCobertura] = useState<"idle" | "checking" | "ok" | "fuera">("idle");
+  const [errorCorreo, setErrorCorreo] = useState<string | undefined>(undefined);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -40,8 +42,22 @@ export function CrearCuentaForm({ paqueteId }: { paqueteId: string }) {
     }, 450);
   }
 
+  // Validación de formato de correo agregada 2026-08-20 — "correos
+  // repetidos" ya se detecta del lado del servidor en `crearCuenta()`
+  // (mensaje traducido de Supabase Auth), aquí solo se atrapa un
+  // correo mal escrito antes de mandar todo el formulario.
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    const email = String(new FormData(e.currentTarget).get("email") ?? "");
+    if (!formatoCorreoValido(email)) {
+      e.preventDefault();
+      setErrorCorreo("Ese correo no tiene un formato válido.");
+    } else {
+      setErrorCorreo(undefined);
+    }
+  }
+
   return (
-    <form action={formAction} className="flex flex-1 flex-col items-start gap-[26px]">
+    <form action={formAction} onSubmit={onSubmit} className="flex flex-1 flex-col items-start gap-[26px]">
       <h1 className="text-display-m text-cream">Crea tu cuenta</h1>
       <input type="hidden" name="paquete_id" value={paqueteId} />
 
@@ -49,10 +65,18 @@ export function CrearCuentaForm({ paqueteId }: { paqueteId: string }) {
         <Field label="Nombre" name="nombre" placeholder="Juan Pablo" required />
         <Field label="Apellido" name="apellido" placeholder="Flores" required />
       </div>
-      <Field label="Correo electrónico" name="email" type="email" placeholder="juanpablo@correo.com" required />
+      <Field
+        label="Correo electrónico"
+        name="email"
+        type="email"
+        placeholder="juanpablo@correo.com"
+        required
+        error={errorCorreo}
+        onChange={() => errorCorreo && setErrorCorreo(undefined)}
+      />
       <div className="flex w-full gap-4">
         <Field label="Teléfono" name="telefono" placeholder="81 1234 5678" />
-        <Field label="Contraseña" name="password" type="password" placeholder="••••••••" required minLength={8} />
+        <PasswordField label="Contraseña" name="password" placeholder="••••••••" required minLength={8} />
       </div>
       <Field label="Fecha de nacimiento" name="fecha_nac" type="date" />
       <SelectField label="¿Cómo te enteraste de nosotros?" name="como_nos_conocio" defaultValue="">
